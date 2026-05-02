@@ -17,6 +17,7 @@
 }
 
 :root {
+    color-scheme: dark;
     --phosphor: #20c20e;
     --phosphor-dim: #0a3d08;
     --phosphor-glow: #39ff14;
@@ -37,6 +38,7 @@
     --panel-edge: rgba(57, 255, 20, 0.18);
     --ui-ease: cubic-bezier(0.16, 1, 0.3, 1);
     --viewport-height: 100vh;
+    --crt-band-opacity: 1;
     --terminal-font: "IBM DOS ISO8", "Px437 IBM ISO8", "Ac437 IBM DOS ISO8", "Mx437 IBM DOS ISO8", "Courier New", monospace;
 }
 
@@ -55,8 +57,23 @@ body {
     font-family: var(--terminal-font);
     font-synthesis: none;
     text-rendering: optimizeSpeed;
+    accent-color: var(--phosphor);
     color: var(--phosphor);
     font-size: var(--font-size-base);
+}
+
+.noscript-warning {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: #020402;
+    color: var(--amber);
+    font-family: var(--terminal-font);
+    text-align: center;
+    letter-spacing: 1px;
 }
 
 /* ===== CRT EFFECTS ===== */
@@ -100,8 +117,22 @@ body.terminal-ready .crt-monitor {
     position: absolute; top: 0; left: 0; right: 0; height: 100px;
     background: linear-gradient(180deg, transparent 0%, rgba(32,194,14,0.03) 50%, transparent 100%);
     animation: crtBand 8s linear infinite;
+    opacity: var(--crt-band-opacity);
     pointer-events: none; z-index: 99;
     will-change: transform;
+}
+
+body.low-power {
+    --scanline-alpha: 0.045;
+    --crt-band-opacity: 0;
+}
+
+body.low-power .crt-band {
+    display: none;
+}
+
+body.low-power .glow {
+    text-shadow: 0 0 1px currentColor;
 }
 
 /* ===== MAIN LAYOUT ===== */
@@ -456,6 +487,11 @@ body.terminal-ready .crt-monitor {
     outline: none;
     text-shadow: 0 0 1px var(--phosphor);
     caret-color: var(--phosphor);
+}
+
+#commandInput:focus-visible {
+    outline: 1px solid var(--cyan);
+    outline-offset: 4px;
 }
 
 .cursor-block {
@@ -1207,6 +1243,18 @@ html.has-gsap .boot-output {
         bottom: max(12px, env(safe-area-inset-bottom));
     }
 }
+
+@media (update: slow), (pointer: coarse) {
+    :root {
+        --scanline-alpha: 0.045;
+        --crt-band-opacity: 0.45;
+    }
+
+    .glow {
+        text-shadow: 0 0 1px currentColor;
+    }
+}
+
 @media (min-width: 1400px) {
     :root {
         --font-size-base: 15px;
@@ -1221,6 +1269,54 @@ html.has-gsap .boot-output {
         --font-size-title: 20px;
         --font-size-small: 13px;
         --font-size-tiny: 12px;
+    }
+}
+
+@media (prefers-contrast: more) {
+    :root {
+        --phosphor: #39ff14;
+        --phosphor-dim: #176d12;
+        --amber: #ffd15c;
+        --cyan: #40f7d0;
+        --scanline-alpha: 0.035;
+    }
+
+    .glow,
+    .system-title,
+    .page-indicator,
+    .prompt,
+    .t-amber,
+    .t-red,
+    .t-cyan,
+    .t-magenta,
+    .t-bright {
+        text-shadow: none;
+    }
+}
+
+@media (forced-colors: active) {
+    *,
+    *::before,
+    *::after {
+        box-shadow: none !important;
+        text-shadow: none !important;
+    }
+
+    .crt-monitor::before,
+    .crt-monitor::after,
+    .crt-band {
+        display: none;
+    }
+
+    .menu-item.selected,
+    .menu-item:focus-visible,
+    .dialog-btn:focus-visible,
+    .diagnostic-close:focus-visible,
+    .facility-close:focus-visible,
+    .boot-skip:focus-visible,
+    #commandInput:focus-visible {
+        outline: 2px solid Highlight;
+        outline-offset: 2px;
     }
 }
 

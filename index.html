@@ -4,19 +4,26 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BLACK DESERT RESEARCH TERMINAL</title>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link rel="preconnect" href="https://sources.debian.org" crossorigin>
     <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
+    <noscript>
+        <div class="noscript-warning" role="alert">
+            BLACK DESERT RESEARCH TERMINAL requires JavaScript to run.
+        </div>
+    </noscript>
+
     <input type="file" id="fileInput" accept=".dat,.db,.bin" aria-label="Load encrypted database file">
     <input type="file" id="statusFileInput" accept=".txt,.md,.markdown,.dat,.db,.bin" aria-label="Load facility status profile file">
     
     <!-- Password Dialog -->
-    <div class="dialog-overlay" id="accessDialog">
+    <div class="dialog-overlay" id="accessDialog" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="accessDialogTitle" aria-describedby="accessDialogDescription">
         <div class="dialog-box glow">
-            <h2>◆ SECURITY CHECK ◆</h2>
-            <p>Enter Administrator password to gain higher clearance:</p>
-            <div class="dialog-error" id="accessError">ACCESS DENIED - INVALID CREDENTIALS</div>
+            <h2 id="accessDialogTitle">◆ SECURITY CHECK ◆</h2>
+            <p id="accessDialogDescription">Enter Administrator password to gain higher clearance:</p>
+            <div class="dialog-error" id="accessError" role="alert">ACCESS DENIED - INVALID CREDENTIALS</div>
             <input type="password" id="accessPassword" placeholder="Enter password..." aria-label="Administrator password">
             <div class="dialog-buttons">
                 <button class="dialog-btn cancel" id="accessCancelBtn" type="button">CANCEL</button>
@@ -84,7 +91,7 @@
             </div>
             <div class="facility-layout">
                 <div class="facility-map-wrap">
-                    <canvas id="facilityCanvas"></canvas>
+                    <canvas id="facilityCanvas" role="img" aria-label="Abstract wireframe facility status map">Abstract wireframe facility status map.</canvas>
                     <div class="facility-map-hud">
                         <span>BDR-01 ABSTRACT WIREFRAME OVERVIEW</span>
                         <span id="facilityScanStatus">SCAN READY</span>
@@ -124,11 +131,11 @@
     </div>
 
     <!-- Main Terminal -->
-    <div class="crt-monitor">
+    <main class="crt-monitor" id="terminalMain" aria-label="Black Desert Research Terminal">
         <div class="crt-band"></div>
         <div class="screen-content">
             <!-- Header -->
-            <div class="header-bar">
+            <header class="header-bar">
                 <div class="header-panel">
                     <div>
                         <div class="system-title glow">BLACK DESERT RESEARCH TERMINAL</div>
@@ -148,15 +155,15 @@
                 <div class="hologram-panel">
                     <div class="hologram-title">◈ FACILITY ◈</div>
                     <div class="hologram-container">
-                        <canvas id="hologramCanvas"></canvas>
+                        <canvas id="hologramCanvas" aria-hidden="true"></canvas>
                     </div>
                 </div>
-            </div>
+            </header>
             
             <!-- Main Content -->
             <div class="main-container">
                 <!-- Left Menu -->
-                <div class="menu-panel">
+                <aside class="menu-panel" aria-label="Terminal command menu">
                     <div class="menu-title">◈ COMMANDS ◈</div>
                     <nav class="menu-list" id="menuList" aria-label="Terminal commands">
                         <button class="menu-item selected" type="button" data-cmd="help" data-index="0" aria-current="true">
@@ -212,10 +219,10 @@
                     </nav>
                     <div class="admin-badge" id="adminBadge">◆ ADMIN ACCESS ◆</div>
                     <div class="menu-footer">↑↓ Navigate | Enter Select</div>
-                </div>
+                </aside>
                 
                 <!-- Right Content -->
-                <div class="content-panel">
+                <section class="content-panel" aria-label="Terminal output">
                     <div class="content-toolbar">
                         <span>SESSION: <span class="t-amber">ACTIVE</span></span>
                         <span class="page-indicator" id="pageIndicator"></span>
@@ -230,10 +237,10 @@
                         <input type="text" id="commandInput" autocomplete="off" spellcheck="false" aria-label="Terminal command input">
                         <div class="cursor-block"></div>
                     </div>
-                </div>
+                </section>
             </div>
         </div>
-    </div>
+    </main>
 
     <div class="nav-hint glow" id="navHint">[ ← → ] NAVIGATE PAGES</div>
 

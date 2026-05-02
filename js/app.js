@@ -2,13 +2,51 @@
 // ========================================
 // CONFIG
 // ========================================
-const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-const MOTION_SCALE = prefersReducedMotion ? 0.25 : 1;
+const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+const lowPowerQuery = window.matchMedia("(update: slow), (pointer: coarse)");
+let prefersReducedMotion = reducedMotionQuery.matches;
+let MOTION_SCALE = prefersReducedMotion ? 0.25 : 1;
+let mediaPreferenceHandlersBound = false;
 const TYPEWRITER_CONFIG = {
     charsPerSecond: prefersReducedMotion ? 99999 : 360,
     maxCharsPerFrame: prefersReducedMotion ? 99999 : 4,
     lineDelay: prefersReducedMotion ? 0 : 0
 };
+
+function syncLowPowerMode() {
+    if (!document.body) return;
+    document.body.classList.toggle('low-power', prefersReducedMotion || lowPowerQuery.matches);
+}
+
+function applyMotionPreference(matches = reducedMotionQuery.matches) {
+    prefersReducedMotion = Boolean(matches);
+    MOTION_SCALE = prefersReducedMotion ? 0.25 : 1;
+    TYPEWRITER_CONFIG.charsPerSecond = prefersReducedMotion ? 99999 : 360;
+    TYPEWRITER_CONFIG.maxCharsPerFrame = prefersReducedMotion ? 99999 : 4;
+    TYPEWRITER_CONFIG.lineDelay = prefersReducedMotion ? 0 : 0;
+    syncLowPowerMode();
+
+    if (prefersReducedMotion) {
+        pauseRealtimePanels();
+    } else {
+        resumeRealtimePanels();
+    }
+}
+
+function bindMediaQueryChange(query, handler) {
+    if (typeof query.addEventListener === 'function') {
+        query.addEventListener('change', handler);
+    } else if (typeof query.addListener === 'function') {
+        query.addListener(handler);
+    }
+}
+
+function bindPreferenceListeners() {
+    if (mediaPreferenceHandlersBound) return;
+    bindMediaQueryChange(reducedMotionQuery, event => applyMotionPreference(event.matches));
+    bindMediaQueryChange(lowPowerQuery, syncLowPowerMode);
+    mediaPreferenceHandlersBound = true;
+}
 
 // ========================================
 // ANIMATION
@@ -557,6 +595,7 @@ let menuItems = [];
 let menuFocused = true;
 let terminalKeyHandlerBound = false;
 let menuHandlersBound = false;
+let accessDialogReturnFocus = null;
 
 // Pagination
 let outputBuffer = [];
@@ -681,6 +720,8 @@ function xorCrypt(text) {
 // INITIALIZATION
 // ========================================
 document.addEventListener('DOMContentLoaded', () => {
+    applyMotionPreference();
+    bindPreferenceListeners();
     Animator.configure();
     AudioEngine.updateSoundStatus();
     menuItems = document.querySelectorAll('.menu-item');
@@ -3043,7 +3084,9 @@ function showAccessDialog() {
     const input = document.getElementById('accessPassword');
     const error = document.getElementById('accessError');
     
+    accessDialogReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     dialog.classList.add('active');
+    dialog.setAttribute('aria-hidden', 'false');
     error.classList.remove('visible');
     input.value = '';
     Animator.dialogOpen(dialog);
@@ -3055,6 +3098,11 @@ function closeAccessDialog() {
     if (!dialog.classList.contains('active')) return;
     Animator.dialogClose(dialog, () => {
         dialog.classList.remove('active');
+        dialog.setAttribute('aria-hidden', 'true');
+        if (accessDialogReturnFocus && accessDialogReturnFocus.isConnected) {
+            accessDialogReturnFocus.focus();
+        }
+        accessDialogReturnFocus = null;
     });
 }
 
@@ -3125,7 +3173,11 @@ function logout() {
 
 function forceCloseRuntimeOverlays() {
     const accessDialog = document.getElementById('accessDialog');
-    if (accessDialog) accessDialog.classList.remove('active');
+    if (accessDialog) {
+        accessDialog.classList.remove('active');
+        accessDialog.setAttribute('aria-hidden', 'true');
+    }
+    accessDialogReturnFocus = null;
 
     const diagnosticOverlay = document.getElementById('diagnosticOverlay');
     diagnosticActive = false;
@@ -3585,7 +3637,11 @@ function initHologram() {
     let renderTimer = null;
     let pixelRatio = 1;
     let lastFrameTime = 0;
-    const targetFrameMs = prefersReducedMotion ? 250 : 33;
+
+    function getHologramFrameMs() {
+        if (prefersReducedMotion) return 250;
+        return document.body.classList.contains('low-power') ? 66 : 33;
+    }
     
     function resize() {
         const rect = canvas.getBoundingClientRect();
@@ -3608,7 +3664,7 @@ function initHologram() {
     resize();
     window.addEventListener('resize', resize);
 
-    function queueHologramFrame(delay = targetFrameMs) {
+    function queueHologramFrame(delay = getHologramFrameMs()) {
         if (renderTimer || !canvas.isConnected) return;
         renderTimer = setTimeout(() => {
             renderTimer = null;
@@ -3670,17 +3726,24 @@ function initHologram() {
     
     function render(timestamp = 0) {
         if (!canvas.isConnected) return;
+        if (!document.body.classList.contains('terminal-ready')) {
+            lastFrameTime = 0;
+            queueHologramFrame(600);
+            return;
+        }
         if (document.hidden) {
+            lastFrameTime = 0;
             queueHologramFrame(600);
             return;
         }
         if (width <= 0 || height <= 0) {
             resize();
+            lastFrameTime = 0;
             queueHologramFrame(600);
             return;
         }
 
-        const delta = lastFrameTime ? Math.min(66, timestamp - lastFrameTime) : targetFrameMs;
+        const delta = lastFrameTime ? Math.min(66, timestamp - lastFrameTime) : getHologramFrameMs();
         lastFrameTime = timestamp;
         
         ctx.fillStyle = 'rgba(3, 10, 3, 0.15)';
