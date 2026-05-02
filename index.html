@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BLACK DESERT RESEARCH TERMINAL</title>
+    <link rel="preconnect" href="https://sources.debian.org" crossorigin>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <input type="file" id="fileInput" accept=".dat,.db,.bin" aria-label="Load encrypted database file">
+    <input type="file" id="statusFileInput" accept=".txt,.md,.markdown,.dat,.db,.bin" aria-label="Load facility status profile file">
+    
+    <!-- Password Dialog -->
+    <div class="dialog-overlay" id="accessDialog">
+        <div class="dialog-box glow">
+            <h2>◆ SECURITY CHECK ◆</h2>
+            <p>Enter Administrator password to gain higher clearance:</p>
+            <div class="dialog-error" id="accessError">ACCESS DENIED - INVALID CREDENTIALS</div>
+            <input type="password" id="accessPassword" placeholder="Enter password..." aria-label="Administrator password">
+            <div class="dialog-buttons">
+                <button class="dialog-btn cancel" id="accessCancelBtn" type="button">CANCEL</button>
+                <button class="dialog-btn primary" id="accessSubmitBtn" type="button">AUTHENTICATE</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Diagnostic Dashboard -->
+    <div class="diagnostic-overlay" id="diagnosticOverlay" aria-hidden="true">
+        <div class="diagnostic-panel glow" role="dialog" aria-modal="true" aria-labelledby="diagnosticTitle">
+            <div class="diagnostic-header">
+                <div>
+                    <div class="diagnostic-title glow" id="diagnosticTitle">BASE DIAGNOSTIC</div>
+                    <div class="diagnostic-meta" id="diagnosticMeta">SCAN BUS: STANDBY</div>
+                </div>
+                <button class="diagnostic-close glow" id="diagnosticClose" type="button">[ CLOSE ]</button>
+            </div>
+            <div class="diagnostic-grid">
+                <div class="diagnostic-card" id="diagNetworkCard">
+                    <div class="diagnostic-label"><span>FACILITY COMMS</span><span id="diagNetworkStatus">SYNC</span></div>
+                    <pre class="diagnostic-readout" id="diagNetwork"></pre>
+                </div>
+                <div class="diagnostic-card" id="diagSecurityCard">
+                    <div class="diagnostic-label"><span>DEFENSE GRID</span><span id="diagSecurityStatus">CHECK</span></div>
+                    <pre class="diagnostic-readout" id="diagSecurity"></pre>
+                </div>
+                <div class="diagnostic-card" id="diagOutpostCard">
+                    <div class="diagnostic-label"><span>RELAY / DRONE LINKS</span><span id="diagOutpostStatus">PING</span></div>
+                    <pre class="diagnostic-readout" id="diagOutpost"></pre>
+                </div>
+                <div class="diagnostic-card" id="diagGeneratorCard">
+                    <div class="diagnostic-label"><span>POWER GENERATOR STATUS</span><span id="diagGeneratorStatus">LOAD</span></div>
+                    <pre class="diagnostic-readout" id="diagGenerator"></pre>
+                </div>
+                <div class="diagnostic-card" id="diagPowerCard">
+                    <div class="diagnostic-label"><span>POWER LEVELS / RESERVES</span><span id="diagPowerStatus">RESERVE</span></div>
+                    <pre class="diagnostic-readout" id="diagPower"></pre>
+                </div>
+                <div class="diagnostic-card" id="diagAlarmCard">
+                    <div class="diagnostic-label"><span>ALARMS / DIS SENSORS</span><span id="diagAlarmStatus">WATCH</span></div>
+                    <pre class="diagnostic-readout" id="diagAlarm"></pre>
+                </div>
+                <div class="diagnostic-card wide" id="diagLifeCard">
+                    <div class="diagnostic-label"><span>BIO SIGNATURES</span><span id="diagLifeStatus">BIO</span></div>
+                    <pre class="diagnostic-readout" id="diagLife"></pre>
+                </div>
+            </div>
+            <div class="diagnostic-footer">
+                <span id="diagnosticTicker">AWAITING SENSOR BUS</span>
+                <span>[ ESC CLOSE ]</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Facility Status -->
+    <div class="facility-overlay" id="facilityOverlay" aria-hidden="true">
+        <div class="facility-panel glow" role="dialog" aria-modal="true" aria-labelledby="facilityTitle">
+            <div class="facility-header">
+                <div>
+                    <div class="facility-title glow" id="facilityTitle">FACILITY STATUS</div>
+                    <div class="facility-meta" id="facilityMeta">WIREFRAME BUS: STANDBY</div>
+                </div>
+                <button class="facility-close glow" id="facilityClose" type="button">[ CLOSE ]</button>
+            </div>
+            <div class="facility-layout">
+                <div class="facility-map-wrap">
+                    <canvas id="facilityCanvas"></canvas>
+                    <div class="facility-map-hud">
+                        <span>BDR-01 ABSTRACT WIREFRAME OVERVIEW</span>
+                        <span id="facilityScanStatus">SCAN READY</span>
+                    </div>
+                </div>
+                <div class="facility-sidebar">
+                    <div class="facility-card">
+                        <div class="facility-card-title">BASE GRID</div>
+                        <pre class="facility-readout" id="facilityOverview"></pre>
+                    </div>
+                    <div class="facility-card">
+                        <div class="facility-card-title">ZONE STATUS</div>
+                        <pre class="facility-readout" id="facilityZones"></pre>
+                    </div>
+                    <div class="facility-card">
+                        <div class="facility-card-title">CONTACTS / FAULTS</div>
+                        <pre class="facility-readout" id="facilityContacts"></pre>
+                    </div>
+                </div>
+            </div>
+            <div class="facility-footer">
+                <span id="facilityTicker">FACILITY GRID WAITING</span>
+                <span>[ ESC CLOSE ]</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Boot Screen -->
+    <div class="boot-screen" id="bootScreen">
+        <div class="boot-left">
+            <div class="boot-output glow" id="bootOutput"></div>
+        </div>
+        <div class="boot-right">
+            <div class="boot-logo glow" id="bootLogo"></div>
+        </div>
+        <button class="boot-skip glow" id="bootSkip" type="button">[ TAP / ENTER TO SKIP ]</button>
+    </div>
+
+    <!-- Main Terminal -->
+    <div class="crt-monitor">
+        <div class="crt-band"></div>
+        <div class="screen-content">
+            <!-- Header -->
+            <div class="header-bar">
+                <div class="header-panel">
+                    <div>
+                        <div class="system-title glow">BLACK DESERT RESEARCH TERMINAL</div>
+                        <div class="status-bar">
+                            <div class="status-item"><div class="status-dot"></div> SYS</div>
+                            <div class="status-item"><div class="status-dot warn"></div> NET</div>
+                            <div class="status-item"><div class="status-dot"></div> DB</div>
+                            <div class="status-item"><div class="status-dot err"></div> EXT</div>
+                            <div class="status-item"><div class="status-dot" id="soundDot"></div> SND:<span id="soundStatus">ON</span></div>
+                        </div>
+                    </div>
+                    <div class="header-info">
+                        ARES MACROTECHNOLOGY<br>
+                        BUILD: <span class="hl">4.7.2</span> | ENTRIES: <span class="hl" id="entryCount">0</span>
+                    </div>
+                </div>
+                <div class="hologram-panel">
+                    <div class="hologram-title">◈ FACILITY ◈</div>
+                    <div class="hologram-container">
+                        <canvas id="hologramCanvas"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Main Content -->
+            <div class="main-container">
+                <!-- Left Menu -->
+                <div class="menu-panel">
+                    <div class="menu-title">◈ COMMANDS ◈</div>
+                    <nav class="menu-list" id="menuList" aria-label="Terminal commands">
+                        <button class="menu-item selected" type="button" data-cmd="help" data-index="0" aria-current="true">
+                            <span class="icon">?</span>
+                            <span>HELP</span>
+                        </button>
+                        <button class="menu-item" type="button" data-cmd="diagnostic" data-index="1" aria-current="false">
+                            <span class="icon">▣</span>
+                            <span>DIAGNOSTIC</span>
+                        </button>
+                        <button class="menu-item" type="button" data-cmd="facility" data-index="2" aria-current="false">
+                            <span class="icon">▧</span>
+                            <span>FACILITY STATUS</span>
+                        </button>
+                        <div class="menu-separator" role="separator" aria-hidden="true"></div>
+                        <button class="menu-item" type="button" data-cmd="load" data-index="3" aria-current="false">
+                            <span class="icon">◊</span>
+                            <span>LOAD DATABASE</span>
+                        </button>
+                        <button class="menu-item" type="button" data-cmd="search" data-index="4" aria-current="false">
+                            <span class="icon">⌕</span>
+                            <span>SEARCH</span>
+                        </button>
+                        <button class="menu-item" type="button" data-cmd="categories" data-index="5" aria-current="false">
+                            <span class="icon">▤</span>
+                            <span>CATEGORIES</span>
+                        </button>
+                        <button class="menu-item" type="button" data-cmd="clear" data-index="6" aria-current="false">
+                            <span class="icon">⌧</span>
+                            <span>CLEAR</span>
+                        </button>
+                        <div class="menu-separator" role="separator" aria-hidden="true"></div>
+                        <button class="menu-item" type="button" data-cmd="access" data-index="7" aria-current="false">
+                            <span class="icon">⚿</span>
+                            <span>ACCESS</span>
+                        </button>
+                        <button class="menu-item admin-cmd locked" type="button" data-cmd="loadStatus" data-index="8" aria-current="false" aria-disabled="true">
+                            <span class="icon">▥</span>
+                            <span>LOAD STATUS</span>
+                        </button>
+                        <button class="menu-item admin-cmd locked" type="button" data-cmd="list" data-index="9" aria-current="false" aria-disabled="true">
+                            <span class="icon">▦</span>
+                            <span>LIST ALL</span>
+                        </button>
+                        <button class="menu-item admin-cmd locked" type="button" data-cmd="fsearch" data-index="10" aria-current="false" aria-disabled="true">
+                            <span class="icon">⌕</span>
+                            <span>FUZZY SEARCH</span>
+                        </button>
+                        <button class="menu-item admin-cmd locked" type="button" data-cmd="logout" data-index="11" aria-current="false" aria-disabled="true">
+                            <span class="icon">⏻</span>
+                            <span>LOGOUT</span>
+                        </button>
+                    </nav>
+                    <div class="admin-badge" id="adminBadge">◆ ADMIN ACCESS ◆</div>
+                    <div class="menu-footer">↑↓ Navigate | Enter Select</div>
+                </div>
+                
+                <!-- Right Content -->
+                <div class="content-panel">
+                    <div class="content-toolbar">
+                        <span>SESSION: <span class="t-amber">ACTIVE</span></span>
+                        <span class="page-indicator" id="pageIndicator"></span>
+                    </div>
+                    <div class="content-viewport" id="contentViewport">
+                        <div class="content-area" id="contentArea">
+                            <div class="output glow" id="output"></div>
+                        </div>
+                    </div>
+                    <div class="input-area">
+                        <span class="prompt glow">></span>
+                        <input type="text" id="commandInput" autocomplete="off" spellcheck="false" aria-label="Terminal command input">
+                        <div class="cursor-block"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="nav-hint glow" id="navHint">[ ← → ] NAVIGATE PAGES</div>
+
+    <!-- GSAP handles complex terminal timelines; Howler provides optional audio context unlock/mute support. -->
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/howler@2.2.4/dist/howler.min.js" defer></script>
+    <script src="js/app.js" defer></script>
+</body>
+</html>
