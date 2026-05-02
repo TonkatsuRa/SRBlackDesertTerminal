@@ -48,6 +48,13 @@ function bindPreferenceListeners() {
     mediaPreferenceHandlersBound = true;
 }
 
+function configureLibrarySupport() {
+    const root = document.documentElement;
+    root.classList.toggle('has-fuse', typeof window.Fuse === 'function');
+    root.classList.toggle('has-pixi', Boolean(window.PIXI && window.PIXI.Application && window.PIXI.Graphics));
+    root.classList.toggle('has-howler', Boolean(window.Howler && window.Howl));
+}
+
 // ========================================
 // ANIMATION
 // ========================================
@@ -238,8 +245,15 @@ const AudioEngine = {
     pendingStartupJingle: false,
     startupJinglePlayed: false,
 
+    syncHowlerState() {
+        if (!window.Howler) return;
+        if (typeof window.Howler.volume === 'function') window.Howler.volume(this.masterVolume);
+        if (typeof window.Howler.mute === 'function') window.Howler.mute(!this.enabled);
+    },
+
     init() {
         if (this.initialized) {
+            this.syncHowlerState();
             this.updateSoundStatus();
             return;
         }
@@ -253,8 +267,7 @@ const AudioEngine = {
             if (window.Howl && window.Howler && window.Howler.ctx) {
                 this.ctx = window.Howler.ctx;
                 this.usingHowler = true;
-                if (typeof window.Howler.volume === 'function') window.Howler.volume(this.masterVolume);
-                if (typeof window.Howler.mute === 'function') window.Howler.mute(!this.enabled);
+                this.syncHowlerState();
             } else {
                 const AudioContextClass = window.AudioContext || window.webkitAudioContext;
                 if (!AudioContextClass) throw new Error('AudioContext unavailable');
@@ -278,15 +291,18 @@ const AudioEngine = {
 
     setEnabled(value) {
         this.enabled = Boolean(value);
-        if (window.Howler && typeof window.Howler.mute === 'function') {
-            window.Howler.mute(!this.enabled);
-        }
+        this.syncHowlerState();
         if (this.enabled) {
             this.init();
             this.resume();
             this.flushPendingAudio();
         }
         this.updateSoundStatus();
+    },
+
+    setMasterVolume(value) {
+        this.masterVolume = Math.max(0, Math.min(1, Number(value) || 0));
+        this.syncHowlerState();
     },
 
     resume() {
@@ -673,9 +689,23 @@ let facilityFrame = 0;
 let facilityAnimFrame = null;
 let facilityLastRender = 0;
 const facilityCanvasSize = { width: 0, height: 0, ratio: 1 };
+let facilityPixiState = {
+    app: null,
+    graphics: null,
+    labelContainer: null,
+    labels: [],
+    canvas: null,
+    unavailable: false
+};
 let facilityZoneCache = null;
 let facilityLinkCache = null;
 let facilityContactCache = null;
+let databaseFuseCache = {
+    signature: '',
+    includeConfidential: false,
+    fuse: null
+};
+let lastFuzzySearchUsedFuse = false;
 let statusProfile = {
     source: 'INTERNAL DEFAULT',
     loaded: false,
@@ -793,6 +823,7 @@ document.addEventListener('DOMContentLoaded', () => {
     applyMotionPreference();
     bindPreferenceListeners();
     Animator.configure();
+    configureLibrarySupport();
     AudioEngine.updateSoundStatus();
     menuItems = document.querySelectorAll('.menu-item');
     calculateLinesPerPage();
@@ -2302,16 +2333,8 @@ function searchDatabase(term) {
 }
 
 function fuzzySearch(term) {
-    const matches = [];
-    const searchTerm = term.toLowerCase();
-    for (const entry of visibleDatabaseEntries(adminMode)) {
-        if (String(entry.id || '').toLowerCase().includes(searchTerm) ||
-            entry.title.toLowerCase().includes(searchTerm) ||
-            entry.content.toLowerCase().includes(searchTerm) ||
-            String(entry.tags || '').toLowerCase().includes(searchTerm)) {
-            matches.push(entry);
-        }
-    }
+    const entries = visibleDatabaseEntries(adminMode);
+    const matches = fuzzySearchEntries(term, entries, adminMode);
     
     clearOutput();
     if (matches.length === 0) {
@@ -2324,9 +2347,80 @@ function fuzzySearch(term) {
         AudioEngine.successTone();
         print('');
         print(`${matches.length} MATCH${matches.length === 1 ? '' : 'ES'} FOUND`, 't-amber');
+        if (lastFuzzySearchUsedFuse) print('FUZZY INDEX: FUSE.JS ONLINE', 't-dim');
         print('═══════════════════════════════════════════', 't-dim');
         matches.forEach(entry => printEntry(entry));
     }
+}
+
+function databaseFuseSignature(entries) {
+    return entries
+        .map(entry => [
+            entry.databaseSlot || '',
+            entry.id || '',
+            entry.title || '',
+            entry.category || '',
+            entry.tags || ''
+        ].join(':'))
+        .join('|');
+}
+
+function getDatabaseFuse(entries, includeConfidential) {
+    if (typeof window.Fuse !== 'function') return null;
+    const signature = databaseFuseSignature(entries);
+    if (
+        databaseFuseCache.fuse &&
+        databaseFuseCache.signature === signature &&
+        databaseFuseCache.includeConfidential === includeConfidential
+    ) {
+        return databaseFuseCache.fuse;
+    }
+
+    try {
+        databaseFuseCache = {
+            signature,
+            includeConfidential,
+            fuse: new window.Fuse(entries, {
+                includeScore: true,
+                ignoreLocation: true,
+                threshold: 0.36,
+                minMatchCharLength: 2,
+                keys: [
+                    { name: 'title', weight: 0.42 },
+                    { name: 'id', weight: 0.22 },
+                    { name: 'tags', weight: 0.2 },
+                    { name: 'category', weight: 0.08 },
+                    { name: 'content', weight: 0.08 }
+                ]
+            })
+        };
+    } catch (error) {
+        databaseFuseCache = { signature: '', includeConfidential: false, fuse: null };
+        return null;
+    }
+    return databaseFuseCache.fuse;
+}
+
+function fuzzySearchEntries(term, entries, includeConfidential = adminMode) {
+    lastFuzzySearchUsedFuse = false;
+    const fuse = getDatabaseFuse(entries, includeConfidential);
+    if (fuse) {
+        lastFuzzySearchUsedFuse = true;
+        return fuse.search(term).slice(0, 18).map(result => result.item);
+    }
+
+    const matches = [];
+    const searchTerm = term.toLowerCase();
+    for (const entry of entries) {
+        if (String(entry.id || '').toLowerCase().includes(searchTerm) ||
+            String(entry.title || '').toLowerCase().includes(searchTerm) ||
+            String(entry.content || '').toLowerCase().includes(searchTerm) ||
+            String(entry.tags || '').toLowerCase().includes(searchTerm) ||
+            String(entry.category || '').toLowerCase().includes(searchTerm)) {
+            matches.push(entry);
+        }
+    }
+    return matches;
 }
 
 function listAllEntries() {
@@ -2488,6 +2582,11 @@ function mountParsedDatabase(parsed, item = {}, path = '') {
 function rebuildDatabaseIndex() {
     database = {};
     databaseEntries = [];
+    databaseFuseCache = {
+        signature: '',
+        includeConfidential: false,
+        fuse: null
+    };
     databaseSlots.forEach(slot => {
         if (!slot.loaded) return;
         slot.entries.forEach(entry => {
@@ -3517,11 +3616,140 @@ function facilityColor(state) {
     return '#20c20e';
 }
 
-function resizeFacilityCanvas(canvas, ctx) {
+function facilityColorNumber(state) {
+    return Number.parseInt(facilityColor(state).slice(1), 16);
+}
+
+function facilityViewportSize(canvas) {
     const rect = canvas.getBoundingClientRect();
     const ratio = Math.min(window.devicePixelRatio || 1, 1.5);
-    const width = Math.max(1, Math.round(rect.width));
-    const height = Math.max(1, Math.round(rect.height));
+    return {
+        width: Math.max(1, Math.round(rect.width)),
+        height: Math.max(1, Math.round(rect.height)),
+        ratio
+    };
+}
+
+function getPixi() {
+    return window.PIXI && window.PIXI.Application && window.PIXI.Graphics ? window.PIXI : null;
+}
+
+function resetFacilityPixiState(options = {}) {
+    const app = facilityPixiState.app;
+    if (app && typeof app.destroy === 'function') {
+        try {
+            app.destroy(Boolean(options.removeView), { children: true, texture: false, baseTexture: false });
+        } catch (error) {}
+    }
+    facilityPixiState = {
+        app: null,
+        graphics: null,
+        labelContainer: null,
+        labels: [],
+        canvas: null,
+        unavailable: Boolean(options.unavailable)
+    };
+}
+
+function ensureFacilityPixi(canvas) {
+    const PIXI = getPixi();
+    if (!PIXI || facilityPixiState.unavailable) return false;
+    if (facilityPixiState.app && facilityPixiState.canvas === canvas) return true;
+
+    resetFacilityPixiState();
+    try {
+        const ratio = Math.min(window.devicePixelRatio || 1, 1.5);
+        const app = new PIXI.Application({
+            view: canvas,
+            backgroundAlpha: 0,
+            antialias: false,
+            autoDensity: true,
+            resolution: ratio,
+            powerPreference: 'low-power',
+            clearBeforeRender: true,
+            autoStart: false
+        });
+        if (app.ticker && typeof app.ticker.stop === 'function') app.ticker.stop();
+        const graphics = new PIXI.Graphics();
+        const labelContainer = new PIXI.Container();
+        app.stage.addChild(graphics, labelContainer);
+        facilityPixiState = {
+            app,
+            graphics,
+            labelContainer,
+            labels: [],
+            canvas,
+            unavailable: false
+        };
+        document.documentElement.classList.add('has-pixi-active');
+        return true;
+    } catch (error) {
+        resetFacilityPixiState({ unavailable: true });
+        document.documentElement.classList.remove('has-pixi-active');
+        return false;
+    }
+}
+
+function resizeFacilityPixi(canvas, width, height) {
+    const state = facilityPixiState;
+    if (!state.app || !state.app.renderer) return false;
+    if (facilityCanvasSize.width !== width || facilityCanvasSize.height !== height) {
+        state.app.renderer.resize(width, height);
+    }
+    facilityCanvasSize.width = width;
+    facilityCanvasSize.height = height;
+    facilityCanvasSize.ratio = Math.min(window.devicePixelRatio || 1, 1.5);
+    return true;
+}
+
+function drawPixiDashedLine(graphics, x1, y1, x2, y2, dash = 8, gap = 8) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const distance = Math.hypot(dx, dy);
+    if (!distance) return;
+    const ux = dx / distance;
+    const uy = dy / distance;
+    let travelled = 0;
+    while (travelled < distance) {
+        const next = Math.min(distance, travelled + dash);
+        graphics.moveTo(x1 + ux * travelled, y1 + uy * travelled);
+        graphics.lineTo(x1 + ux * next, y1 + uy * next);
+        travelled += dash + gap;
+    }
+}
+
+function pixiLabel(index, text, x, y, color, size = 11, alpha = 0.9) {
+    const PIXI = getPixi();
+    if (!PIXI || !facilityPixiState.labelContainer) return;
+    let label = facilityPixiState.labels[index];
+    if (!label) {
+        label = new PIXI.Text('', {
+            fontFamily: '"IBM DOS ISO8", "Courier New", monospace',
+            fontSize: size,
+            fill: color,
+            letterSpacing: 0
+        });
+        label.resolution = Math.min(window.devicePixelRatio || 1, 1.5);
+        facilityPixiState.labels[index] = label;
+        facilityPixiState.labelContainer.addChild(label);
+    }
+    label.text = text;
+    label.x = x;
+    label.y = y;
+    label.alpha = alpha;
+    label.style.fontSize = size;
+    label.style.fill = color;
+    label.visible = true;
+}
+
+function trimPixiLabels(usedCount) {
+    for (let i = usedCount; i < facilityPixiState.labels.length; i++) {
+        if (facilityPixiState.labels[i]) facilityPixiState.labels[i].visible = false;
+    }
+}
+
+function resizeFacilityCanvas(canvas, ctx) {
+    const { width, height, ratio } = facilityViewportSize(canvas);
     const targetWidth = Math.max(1, Math.round(width * ratio));
     const targetHeight = Math.max(1, Math.round(height * ratio));
 
@@ -3681,6 +3909,115 @@ function drawFacilityContacts(ctx, rects, frame, contacts) {
     ctx.restore();
 }
 
+function renderFacilityStatusPixi(canvas, width, height, frame, zones, links, contacts, rects) {
+    try {
+        if (!ensureFacilityPixi(canvas)) return false;
+        if (!resizeFacilityPixi(canvas, width, height)) return false;
+
+        const state = facilityPixiState;
+        const graphics = state.graphics;
+        if (!graphics || !state.app || !state.app.renderer) return false;
+
+        graphics.clear();
+    graphics.beginFill(0x000804, 0.56);
+    graphics.drawRect(0, 0, width, height);
+    graphics.endFill();
+
+    const cx = width * 0.5;
+    const cy = height * 0.48;
+    graphics.lineStyle(1, 0x00d4aa, 0.08);
+    for (let radius = 70; radius < Math.max(width, height); radius += 86) {
+        graphics.drawEllipse(cx, cy, radius, radius * 0.38);
+    }
+    graphics.lineStyle(1, 0x00d4aa, 0.1);
+    graphics.moveTo(0, cy);
+    graphics.lineTo(width, cy);
+    graphics.moveTo(cx, 0);
+    graphics.lineTo(cx, height);
+
+    if (!prefersReducedMotion) {
+        const sweepX = ((frame * 3.4) % (width + 160)) - 80;
+        graphics.beginFill(0x00d4aa, 0.055);
+        graphics.drawRect(sweepX - 18, 0, 36, height);
+        graphics.endFill();
+    }
+
+    links.forEach(link => {
+        const start = rects[link.from];
+        const end = rects[link.to];
+        if (!start || !end) return;
+        const color = facilityColorNumber(link.state);
+        graphics.lineStyle(link.state === 'alert' ? 1.2 : 1, color, link.state === 'alert' ? 0.46 : 0.32);
+        drawPixiDashedLine(graphics, start.cx, start.cy, end.cx, end.cy, link.state === 'ok' ? 9 : 5, link.state === 'ok' ? 11 : 8);
+        const t = prefersReducedMotion ? link.phase : (frame * 0.012 + link.phase) % 1;
+        const px = start.cx + (end.cx - start.cx) * t;
+        const py = start.cy + (end.cy - start.cy) * t;
+        graphics.beginFill(color, link.state === 'alert' ? 0.95 : 0.72);
+        graphics.drawRect(px - 2, py - 2, 4, 4);
+        graphics.endFill();
+    });
+
+    let labelIndex = 0;
+    zones.forEach(zone => {
+        const rect = rects[zone.id];
+        if (!rect) return;
+        const color = facilityColorNumber(zone.state);
+        const colorText = facilityColor(zone.state);
+        const blink = zone.state === 'alert' && !prefersReducedMotion && frame % 24 < 12;
+        const offset = Math.max(5, Math.min(10, rect.w * 0.09));
+        const labelSize = width < 560 ? 10 : 12;
+
+        graphics.lineStyle(zone.state === 'alert' ? 1.35 : 1, color, blink ? 0.55 : 0.84);
+        graphics.drawRect(rect.x, rect.y, rect.w, rect.h);
+        graphics.lineStyle(zone.state === 'alert' ? 1.35 : 1, color, blink ? 0.28 : 0.44);
+        graphics.drawRect(rect.x + offset, rect.y - offset, rect.w, rect.h);
+        graphics.moveTo(rect.x, rect.y);
+        graphics.lineTo(rect.x + offset, rect.y - offset);
+        graphics.moveTo(rect.x + rect.w, rect.y);
+        graphics.lineTo(rect.x + rect.w + offset, rect.y - offset);
+        graphics.moveTo(rect.x, rect.y + rect.h);
+        graphics.lineTo(rect.x + offset, rect.y + rect.h - offset);
+        graphics.moveTo(rect.x + rect.w, rect.y + rect.h);
+        graphics.lineTo(rect.x + rect.w + offset, rect.y + rect.h - offset);
+
+        graphics.beginFill(color, 0.24);
+        graphics.drawRect(rect.x + 7, rect.y + rect.h - 9, Math.max(28, rect.w - 14), 3);
+        graphics.endFill();
+        graphics.beginFill(color, blink ? 0.62 : 0.75);
+        graphics.drawRect(rect.x + 7, rect.y + rect.h - 9, Math.max(28, rect.w - 14) * Math.max(0.08, zone.load / 100), 3);
+        graphics.endFill();
+
+        pixiLabel(labelIndex++, zone.label, rect.x + 7, rect.y + 5, colorText, labelSize, 0.92);
+        pixiLabel(labelIndex++, zone.status, rect.x + 7, rect.y + Math.min(rect.h - 19, 21), colorText, labelSize, zone.state === 'ok' ? 0.62 : 0.86);
+    });
+
+    graphics.lineStyle(1, 0xff3333, 1);
+    contacts.forEach((contact, index) => {
+        const start = rects[contact.from];
+        const end = rects[contact.to];
+        if (!start || !end) return;
+        const t = prefersReducedMotion ? contact.phase : (contact.phase + frame * (0.006 + index * 0.001)) % 1;
+        const wobble = prefersReducedMotion ? 0 : Math.sin(frame * 0.09 + index) * 7;
+        const px = start.cx + (end.cx - start.cx) * t;
+        const py = start.cy + (end.cy - start.cy) * t + wobble;
+        const radius = 4 + (prefersReducedMotion ? 0 : Math.sin(frame * 0.18 + index) * 1.2);
+        graphics.lineStyle(1, 0xff3333, 0.38);
+        graphics.drawCircle(px, py, radius + 4);
+        graphics.beginFill(0xff3333, 0.95);
+        graphics.drawCircle(px, py, Math.max(2, radius * 0.45));
+        graphics.endFill();
+    });
+    trimPixiLabels(labelIndex);
+
+        state.app.renderer.render(state.app.stage);
+        return true;
+    } catch (error) {
+        resetFacilityPixiState({ unavailable: true });
+        document.documentElement.classList.remove('has-pixi-active');
+        return false;
+    }
+}
+
 function updateFacilityReadouts(frame) {
     const loading = !prefersReducedMotion && frame < 10;
     const phase = prefersReducedMotion ? 24 : frame;
@@ -3742,22 +4079,34 @@ function updateFacilityReadouts(frame) {
 function renderFacilityStatus(timestamp = 0) {
     const canvas = getById('facilityCanvas');
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    resizeFacilityCanvas(canvas, ctx);
-    const width = facilityCanvasSize.width;
-    const height = facilityCanvasSize.height;
+    const { width, height } = facilityViewportSize(canvas);
     const frame = facilityFrame || Math.round(timestamp / 33);
     const rects = {};
     const zones = getFacilityZones();
     const links = getFacilityLinks();
     const contacts = getFacilityContacts();
 
-    drawFacilityBackdrop(ctx, width, height, frame);
     zones.forEach(zone => {
         rects[zone.id] = facilityRect(zone, width, height, frame);
     });
+
+    if (renderFacilityStatusPixi(canvas, width, height, frame, zones, links, contacts, rects)) {
+        if (frame < 3 || frame % 4 === 0 || prefersReducedMotion) {
+            updateFacilityReadouts(frame);
+        }
+        return;
+    }
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+        if (frame < 3 || frame % 4 === 0 || prefersReducedMotion) {
+            updateFacilityReadouts(frame);
+        }
+        return;
+    }
+
+    resizeFacilityCanvas(canvas, ctx);
+    drawFacilityBackdrop(ctx, width, height, frame);
     links.forEach(link => drawFacilityConnection(ctx, link, rects, frame));
     zones.forEach(zone => drawFacilityBlock(ctx, zone, rects[zone.id], frame, width));
     drawFacilityContacts(ctx, rects, frame, contacts);
