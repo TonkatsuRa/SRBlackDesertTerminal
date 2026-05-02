@@ -87,53 +87,59 @@ Ares values dedication, discretion, and replaceable efficiency.
   Request elevated administrator privileges.
 
 @cyan CATEGORIES
-  Displays all available categories and visible entry counts.
+  Show categories and visible entry counts.
 
 @cyan CLEAR
-  Clears the display area. Loaded data remains active.
+  Clear screen; loaded data remains mounted.
 
 @cyan DIAGNOSTIC
-  Opens current base diagnostic dashboard.
+  Open current base diagnostic dashboard.
 
 @cyan EJECT ALL DATABASE
-  Ejects every mounted database package.
+  Eject every mounted database package.
 
 @cyan EJECT DATABASE SLOT 1 / 2 / 3
-  Ejects one mounted database slot so another package can be loaded.
+  Eject one slot so another package can load.
 
 @cyan FACILITY STATUS
-  Opens abstract wireframe overview of facility zones.
+  Open abstract wireframe facility overview.
 
 @cyan LOAD DATABASE
-  Opens the in-terminal database selector.
-  Select a package, then enter that package password.
-  Up to three database packages can be mounted at once.
+  Open the in-terminal database selector.
+  Select a package, then enter its password.
+  Up to three packages can be mounted.
 
 @cyan LOAD FILE
-  Opens a local .md, .txt, or .dat database file.
+  Open a local .md, .txt, or .dat database file.
 
 @cyan SEARCH
-  Query database by exact entry title or entry id.
+  Query by exact entry title or entry id.
   Example: SEARCH perimeter-drone
 
 @cyan SOUND ON / SOUND OFF
-  Toggles optional terminal audio.
+  Toggle optional terminal audio.
 
 @cyan STATUS FORMAT
-  Prints the editable status profile file format.
+  Print the editable status profile format.
 
 @cyan WELCOME
-  Displays the corporate welcome notice.
+  Display the corporate welcome notice.
 
 @pagebreak
 @dim ───────────────────────────────────────────────────────
 @red ADMIN COMMANDS (requires ACCESS)
 @dim ───────────────────────────────────────────────────────
-@red FUZZY SEARCH - Partial match in title, id, tags, or body.
-@red LIST ALL - Complete index including confidential entries.
-@red LOAD STATUS / STATUS LOAD - Load profile; restarts terminal.
+
+@red FUZZY SEARCH - Partial match search.
+
+@red LIST ALL - Complete database index.
+
+@red LOAD STATUS / STATUS LOAD - Load status profile.
+
 @red LOGOUT - Terminate administrator session.
-@red STATUS CLEAR - Restore default facility data.
+
+@red STATUS CLEAR - Restore default status data.
+
 @dim Navigation: ↑↓ Menu | ←→ Pages | Enter Select
 @dim ═══════════════════════════════════════════════════════
 ```

@@ -658,6 +658,7 @@ let accessDialogReturnFocus = null;
 
 // Pagination
 let outputBuffer = [];
+let outputPages = [[]];
 let currentPage = 0;
 let linesPerPage = 15;
 let totalPages = 1;
@@ -1580,6 +1581,7 @@ let typewriterRunId = 0;
 let outputRenderFrame = null;
 let typewriterFrame = null;
 let bufferRecalcPending = false;
+let outputGroupCounter = 0;
 
 function addToBuffer(text, className = '') {
     const lines = text.split('\n');
@@ -1594,65 +1596,17 @@ function isOutputPageBreak(text) {
 }
 
 function addPageBreakToBuffer() {
-    if (!outputBuffer.length) return;
-    const remainder = outputBuffer.length % linesPerPage;
-    const blankLines = remainder === 0 ? 0 : linesPerPage - remainder;
-    for (let i = 0; i < blankLines; i++) {
-        outputBuffer.push({ text: '', className: '' });
-    }
+    outputBuffer.push({ text: '', className: '', pageBreak: true });
     scheduleBufferRecalculate();
-}
-
-function remainingOutputPageLines() {
-    const remainder = outputBuffer.length % linesPerPage;
-    return remainder === 0 ? linesPerPage : linesPerPage - remainder;
 }
 
 function addOutputGroup(lines) {
     const group = lines.filter(line => line && typeof line.text === 'string');
     if (!group.length) return;
-    if (group.length > linesPerPage && isHelpHeadingLine(group[0].text, group[0].className)) {
-        addLongHelpGroup(group);
-        return;
-    }
-    if (outputBuffer.length && group.length <= linesPerPage && group.length > remainingOutputPageLines()) {
-        addPageBreakToBuffer();
-    }
+    const groupId = `help-${++outputGroupCounter}`;
     group.forEach(line => {
-        outputBuffer.push({ text: line.text, className: line.className || '' });
+        outputBuffer.push({ text: line.text, className: line.className || '', groupId });
     });
-    scheduleBufferRecalculate();
-}
-
-function addLongHelpGroup(group) {
-    const heading = group[0];
-    const remaining = group.slice(1);
-    let capacity = remainingOutputPageLines();
-
-    if (outputBuffer.length && capacity < 2) {
-        addPageBreakToBuffer();
-        capacity = linesPerPage;
-    }
-
-    outputBuffer.push({ text: heading.text, className: heading.className || '' });
-    let firstBodyCount = Math.max(0, capacity - 1);
-    while (firstBodyCount > 0 && remaining.length) {
-        const line = remaining.shift();
-        outputBuffer.push({ text: line.text, className: line.className || '' });
-        firstBodyCount--;
-    }
-
-    while (remaining.length) {
-        addPageBreakToBuffer();
-        outputBuffer.push({ text: heading.text, className: heading.className || '' });
-        let bodyCount = Math.max(1, linesPerPage - 1);
-        while (bodyCount > 0 && remaining.length) {
-            const line = remaining.shift();
-            outputBuffer.push({ text: line.text, className: line.className || '' });
-            bodyCount--;
-        }
-    }
-
     scheduleBufferRecalculate();
 }
 
@@ -1694,8 +1648,80 @@ function scheduleBufferRecalculate() {
     });
 }
 
+function appendLineToPages(pages, line) {
+    let current = pages[pages.length - 1];
+    if (current.length >= linesPerPage) {
+        current = [];
+        pages.push(current);
+    }
+    current.push({ text: line.text, className: line.className || '' });
+}
+
+function appendGroupToPages(pages, group) {
+    if (!group.length) return;
+    let current = pages[pages.length - 1];
+    const heading = isHelpHeadingLine(group[0].text, group[0].className) ? group[0] : null;
+
+    if (group.length <= linesPerPage) {
+        if (current.length && current.length + group.length > linesPerPage) {
+            current = [];
+            pages.push(current);
+        }
+        group.forEach(line => current.push({ text: line.text, className: line.className || '' }));
+        return;
+    }
+
+    if (!heading) {
+        group.forEach(line => appendLineToPages(pages, line));
+        return;
+    }
+
+    if (current.length && linesPerPage - current.length < 2) {
+        current = [];
+        pages.push(current);
+    }
+
+    current.push({ text: heading.text, className: heading.className || '' });
+    const body = group.slice(1);
+    while (body.length) {
+        current = pages[pages.length - 1];
+        if (current.length >= linesPerPage) {
+            current = [{ text: heading.text, className: heading.className || '' }];
+            pages.push(current);
+        }
+        const bodyLine = body.shift();
+        current.push({ text: bodyLine.text, className: bodyLine.className || '' });
+    }
+}
+
+function buildOutputPages() {
+    const pages = [[]];
+    for (let i = 0; i < outputBuffer.length; i++) {
+        const line = outputBuffer[i];
+        if (line.pageBreak) {
+            if (pages[pages.length - 1].length) pages.push([]);
+            continue;
+        }
+        if (line.groupId) {
+            const groupId = line.groupId;
+            const group = [];
+            while (i < outputBuffer.length && outputBuffer[i].groupId === groupId) {
+                group.push(outputBuffer[i]);
+                i++;
+            }
+            i--;
+            appendGroupToPages(pages, group);
+            continue;
+        }
+        appendLineToPages(pages, line);
+    }
+    while (pages.length > 1 && pages[pages.length - 1].length === 0) pages.pop();
+    return pages;
+}
+
 function recalculatePages() {
-    totalPages = Math.max(1, Math.ceil(outputBuffer.length / linesPerPage));
+    outputPages = buildOutputPages();
+    totalPages = Math.max(1, outputPages.length);
     currentPage = 0;
     updatePageIndicator();
     scheduleCurrentPageRender();
@@ -1719,9 +1745,11 @@ function clearOutput() {
         typewriterFrame = null;
     }
     outputBuffer = [];
+    outputPages = [[]];
     currentPage = 0;
     totalPages = 1;
     bufferRecalcPending = false;
+    outputGroupCounter = 0;
     typewriterQueue = [];
     isTyping = false;
     typewriterRunId++;
@@ -1751,9 +1779,7 @@ function renderCurrentPage() {
     clearElement(output);
     if (!output) return;
     
-    const start = currentPage * linesPerPage;
-    const end = Math.min(start + linesPerPage, outputBuffer.length);
-    const pageLines = outputBuffer.slice(start, end);
+    const pageLines = outputPages[currentPage] || [];
     
     // Queue lines for typewriter effect
     typewriterRunId++;
@@ -1898,9 +1924,7 @@ function renderCurrentPageInstant() {
     clearElement(output);
     if (!output) return;
     
-    const start = currentPage * linesPerPage;
-    const end = Math.min(start + linesPerPage, outputBuffer.length);
-    const pageLines = outputBuffer.slice(start, end);
+    const pageLines = outputPages[currentPage] || [];
     const fragment = document.createDocumentFragment();
     
     pageLines.forEach(line => {
@@ -2175,50 +2199,57 @@ function showHelp() {
         { text: '  Request elevated administrator privileges.', className: '' },
         { text: '', className: '' },
         { text: 'CATEGORIES', className: 't-cyan' },
-        { text: '  Displays all available categories and visible entry counts.', className: '' },
+        { text: '  Show categories and visible entry counts.', className: '' },
         { text: '', className: '' },
         { text: 'CLEAR', className: 't-cyan' },
-        { text: '  Clears the display area. Loaded data remains active.', className: '' },
+        { text: '  Clear screen; loaded data remains mounted.', className: '' },
         { text: '', className: '' },
         { text: 'DIAGNOSTIC', className: 't-cyan' },
-        { text: '  Opens current base diagnostic dashboard.', className: '' },
+        { text: '  Open current base diagnostic dashboard.', className: '' },
         { text: '', className: '' },
         { text: 'EJECT ALL DATABASE', className: 't-cyan' },
-        { text: '  Ejects every mounted database package.', className: '' },
+        { text: '  Eject every mounted database package.', className: '' },
         { text: '', className: '' },
         { text: 'EJECT DATABASE SLOT 1 / 2 / 3', className: 't-cyan' },
-        { text: '  Ejects one mounted database slot so another package can be loaded.', className: '' },
+        { text: '  Eject one slot so another package can load.', className: '' },
         { text: '', className: '' },
         { text: 'FACILITY STATUS', className: 't-cyan' },
-        { text: '  Opens abstract wireframe overview of facility zones.', className: '' },
+        { text: '  Open abstract wireframe facility overview.', className: '' },
         { text: '', className: '' },
         { text: 'LOAD DATABASE', className: 't-cyan' },
-        { text: '  Opens the database selector. Up to three packages can be mounted.', className: '' },
+        { text: '  Open the database selector.', className: '' },
+        { text: '  Up to three packages can be mounted.', className: '' },
         { text: '', className: '' },
         { text: 'LOAD FILE', className: 't-cyan' },
-        { text: '  Opens a local .md, .txt, or .dat database file.', className: '' },
+        { text: '  Open a local .md, .txt, or .dat database file.', className: '' },
         { text: '', className: '' },
         { text: 'SEARCH', className: 't-cyan' },
-        { text: '  Query database by exact entry title or entry id.', className: '' },
+        { text: '  Query by exact entry title or entry id.', className: '' },
         { text: '', className: '' },
         { text: 'SOUND ON / SOUND OFF', className: 't-cyan' },
-        { text: '  Toggles optional terminal audio.', className: '' },
+        { text: '  Toggle optional terminal audio.', className: '' },
         { text: '', className: '' },
         { text: 'STATUS FORMAT', className: 't-cyan' },
-        { text: '  Prints the editable status profile file format.', className: '' },
+        { text: '  Print the editable status profile format.', className: '' },
         { text: '', className: '' },
         { text: 'WELCOME', className: 't-cyan' },
-        { text: '  Displays the corporate welcome notice.', className: '' },
+        { text: '  Display the corporate welcome notice.', className: '' },
         { text: '', className: '' },
         { text: '@pagebreak', className: '' },
         { text: '───────────────────────────────────────────────────────', className: 't-dim' },
         { text: 'ADMIN COMMANDS (requires ACCESS)', className: 't-red' },
         { text: '───────────────────────────────────────────────────────', className: 't-dim' },
-        { text: 'FUZZY SEARCH - Partial match in title or content.', className: 't-red' },
-        { text: 'LIST ALL - Complete index including confidential entries.', className: 't-red' },
-        { text: 'LOAD STATUS / STATUS LOAD - Load profile; restarts terminal.', className: 't-red' },
+        { text: '', className: '' },
+        { text: 'FUZZY SEARCH - Partial match search.', className: 't-red' },
+        { text: '', className: '' },
+        { text: 'LIST ALL - Complete database index.', className: 't-red' },
+        { text: '', className: '' },
+        { text: 'LOAD STATUS / STATUS LOAD - Load status profile.', className: 't-red' },
+        { text: '', className: '' },
         { text: 'LOGOUT - Terminate administrator session.', className: 't-red' },
-        { text: 'STATUS CLEAR - Restore default facility data.', className: 't-red' },
+        { text: '', className: '' },
+        { text: 'STATUS CLEAR - Restore default status data.', className: 't-red' },
+        { text: '', className: '' },
         { text: 'Navigation: ↑↓ Menu | ←→ Pages | Enter Select', className: 't-dim' },
         { text: '═══════════════════════════════════════════════════════', className: 't-dim' }
     ]);
