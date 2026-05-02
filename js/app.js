@@ -1589,6 +1589,20 @@ function addToBuffer(text, className = '') {
     scheduleBufferRecalculate();
 }
 
+function isOutputPageBreak(text) {
+    return ['@pagebreak', '[pagebreak]', '{pagebreak}'].includes(String(text || '').trim().toLowerCase());
+}
+
+function addPageBreakToBuffer() {
+    if (!outputBuffer.length) return;
+    const remainder = outputBuffer.length % linesPerPage;
+    const blankLines = remainder === 0 ? 0 : linesPerPage - remainder;
+    for (let i = 0; i < blankLines; i++) {
+        outputBuffer.push({ text: '', className: '' });
+    }
+    scheduleBufferRecalculate();
+}
+
 function scheduleBufferRecalculate() {
     if (bufferRecalcPending) return;
     bufferRecalcPending = true;
@@ -2064,18 +2078,30 @@ function showHelp() {
     clearOutput();
     const customHelp = contentLines('help', []);
     if (customHelp.length) {
-        customHelp.forEach((line, index) => print(line, contentClass('help', index, '')));
+        customHelp.forEach((line, index) => {
+            if (isOutputPageBreak(line)) {
+                addPageBreakToBuffer();
+                return;
+            }
+            print(line, contentClass('help', index, ''));
+        });
         return;
     }
     print('═══════════════════════════════════════════════════════', 't-dim');
     print('                    SYSTEM MANUAL', 't-bright');
     print('═══════════════════════════════════════════════════════', 't-dim');
     print('');
-    print('LOAD DATABASE', 't-cyan');
-    print('  Opens the in-terminal database selector.');
-    print('  Select a package, then enter that package password.');
-    print('  Up to three database packages can be mounted at once.');
-    print('  Local .md, .txt, or .dat fallback is still available with LOAD FILE.');
+    print('ACCESS', 't-cyan');
+    print('  Request elevated administrator privileges.');
+    print('');
+    print('CATEGORIES', 't-cyan');
+    print('  Displays all available categories and visible entry counts.');
+    print('');
+    print('CLEAR', 't-cyan');
+    print('  Clears the display area. Loaded data remains active.');
+    print('');
+    print('DIAGNOSTIC', 't-cyan');
+    print('  Opens current base diagnostic dashboard.');
     print('');
     print('EJECT ALL DATABASE', 't-cyan');
     print('  Ejects every mounted database package.');
@@ -2083,59 +2109,36 @@ function showHelp() {
     print('EJECT DATABASE SLOT 1 / 2 / 3', 't-cyan');
     print('  Ejects one mounted database slot so another package can be loaded.');
     print('');
+    print('FACILITY STATUS', 't-cyan');
+    print('  Opens abstract wireframe overview of facility zones.');
+    print('');
+    print('LOAD DATABASE', 't-cyan');
+    print('  Opens the database selector. Up to three packages can be mounted.');
+    print('');
+    print('LOAD FILE', 't-cyan');
+    print('  Opens a local .md, .txt, or .dat database file.');
+    print('');
     print('SEARCH', 't-cyan');
-    print('  Query database by exact entry title.');
-    print('  Case-insensitive but requires full title match.');
-    print('  Example: SEARCH Seattle');
-    print('');
-    print('CATEGORIES', 't-cyan');
-    print('  Displays all available categories and entry counts.');
-    print('  Useful for browsing database structure.');
-    print('');
-    print('CLEAR', 't-cyan');
-    print('  Clears the display area.');
-    print('  Does not affect loaded database.');
+    print('  Query database by exact entry title or entry id.');
     print('');
     print('SOUND ON / SOUND OFF', 't-cyan');
     print('  Toggles optional terminal audio.');
-    print('  Audio starts only after browser user interaction.');
     print('');
-    print('DIAGNOSTIC', 't-cyan');
-    print('  Opens current base status dashboard.');
-    print('  Displays facility comms, defense, power, alarms, and life signs.');
+    print('STATUS FORMAT', 't-cyan');
+    print('  Prints the editable status profile file format.');
     print('');
-    print('FACILITY STATUS', 't-cyan');
-    print('  Opens abstract wireframe overview of facility zones.');
-    print('  Shows maintenance faults, damaged sectors, and unknown contacts.');
+    print('WELCOME', 't-cyan');
+    print('  Displays the corporate welcome notice.');
     print('');
-    print('ACCESS', 't-cyan');
-    print('  Request elevated privileges.');
-    print('  Requires administrator password.');
-    print('  Unlocks additional commands and data.');
-    print('');
+    addPageBreakToBuffer();
     print('───────────────────────────────────────────────────────', 't-dim');
     print('ADMIN COMMANDS (requires ACCESS)', 't-red');
     print('───────────────────────────────────────────────────────', 't-dim');
-    print('');
-    print('LOAD STATUS / STATUS LOAD', 't-red');
-    print('  Opens file selector for a .txt, .md, or encrypted .dat status profile.');
-    print('  Changes boot, DIAGNOSTIC, and FACILITY STATUS readouts.');
-    print('  Restarts the terminal and revokes admin access after loading.');
-    print('  Use STATUS FORMAT to print the editable file format.');
-    print('');
-    print('LIST ALL', 't-red');
-    print('  Display complete database index.');
-    print('  Shows all entries including CONFIDENTIAL.');
-    print('');
-    print('FUZZY SEARCH', 't-red');
-    print('  Search by partial match in title or content.');
-    print('  More flexible than standard SEARCH.');
-    print('');
-    print('LOGOUT', 't-red');
-    print('  Terminate administrator session.');
-    print('  Revokes elevated privileges.');
-    print('');
-    print('═══════════════════════════════════════════════════════', 't-dim');
+    print('FUZZY SEARCH - Partial match in title or content.', 't-red');
+    print('LIST ALL - Complete index including confidential entries.', 't-red');
+    print('LOAD STATUS / STATUS LOAD - Load profile; restarts terminal.', 't-red');
+    print('LOGOUT - Terminate administrator session.', 't-red');
+    print('STATUS CLEAR - Restore default facility data.', 't-red');
     print('Navigation: ↑↓ Menu | ←→ Pages | Enter Select', 't-dim');
     print('═══════════════════════════════════════════════════════', 't-dim');
 }

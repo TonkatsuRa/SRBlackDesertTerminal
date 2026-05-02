@@ -12,6 +12,7 @@
 // Do not put ``` inside visible text; it marks the end of a block.
 // Optional color hints go at the start of a line:
 // @dim, @bright, @cyan, @amber, @red, @magenta
+// Use @pagebreak on its own line to force the next text onto a new page.
 //
 // Example:
 // ## welcome
@@ -82,15 +83,8 @@ Ares values dedication, discretion, and replaceable efficiency.
 @bright                     SYSTEM MANUAL
 @dim ═══════════════════════════════════════════════════════
 
-@cyan LOAD DATABASE
-  Opens the in-terminal database selector.
-  Select a package, then enter that package password.
-  Up to three database packages can be mounted at once.
-  Available Commands: EJECT ALL DATABASE / EJECT DATABASE SLOT 1-3
-
-@cyan SEARCH
-  Query database by exact entry title or entry id.
-  Example: SEARCH perimeter-drone
+@cyan ACCESS
+  Request elevated administrator privileges.
 
 @cyan CATEGORIES
   Displays all available categories and visible entry counts.
@@ -101,36 +95,45 @@ Ares values dedication, discretion, and replaceable efficiency.
 @cyan DIAGNOSTIC
   Opens current base diagnostic dashboard.
 
-@cyan FACILITY STATUS
-  Opens abstract wireframe overview of facility zones.
-
-@cyan ACCESS
-  Request elevated administrator privileges.
-
-@dim ───────────────────────────────────────────────────────
-@red ADMIN COMMANDS (requires ACCESS)
-@dim ───────────────────────────────────────────────────────
-
-@red LOAD STATUS / STATUS LOAD
-  Loads a .txt, .md, or encrypted .dat status profile.
-  Restarts the terminal and revokes admin access after loading.
-
-@red LIST ALL
-  Displays complete database index including confidential entries.
-
-@red FUZZY SEARCH
-  Search by partial match in title, id, tags, or body.
-
-@red LOGOUT
-  Terminate administrator session.
-
 @cyan EJECT ALL DATABASE
   Ejects every mounted database package.
 
 @cyan EJECT DATABASE SLOT 1 / 2 / 3
   Ejects one mounted database slot so another package can be loaded.
 
-@dim ═══════════════════════════════════════════════════════
+@cyan FACILITY STATUS
+  Opens abstract wireframe overview of facility zones.
+
+@cyan LOAD DATABASE
+  Opens the in-terminal database selector.
+  Select a package, then enter that package password.
+  Up to three database packages can be mounted at once.
+
+@cyan LOAD FILE
+  Opens a local .md, .txt, or .dat database file.
+
+@cyan SEARCH
+  Query database by exact entry title or entry id.
+  Example: SEARCH perimeter-drone
+
+@cyan SOUND ON / SOUND OFF
+  Toggles optional terminal audio.
+
+@cyan STATUS FORMAT
+  Prints the editable status profile file format.
+
+@cyan WELCOME
+  Displays the corporate welcome notice.
+
+@pagebreak
+@dim ───────────────────────────────────────────────────────
+@red ADMIN COMMANDS (requires ACCESS)
+@dim ───────────────────────────────────────────────────────
+@red FUZZY SEARCH - Partial match in title, id, tags, or body.
+@red LIST ALL - Complete index including confidential entries.
+@red LOAD STATUS / STATUS LOAD - Load profile; restarts terminal.
+@red LOGOUT - Terminate administrator session.
+@red STATUS CLEAR - Restore default facility data.
 @dim Navigation: ↑↓ Menu | ←→ Pages | Enter Select
 @dim ═══════════════════════════════════════════════════════
 ```

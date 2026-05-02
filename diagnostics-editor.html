@@ -397,6 +397,11 @@ ejectAllDatabase = EJECT ALL DATABASE
 ejectDatabaseSlot1 = EJECT DATABASE SLOT 1
 ejectDatabaseSlot2 = EJECT DATABASE SLOT 2
 ejectDatabaseSlot3 = EJECT DATABASE SLOT 3
+statusLoad = STATUS LOAD
+statusClear = STATUS CLEAR
+statusFormat = STATUS FORMAT
+soundOn = SOUND ON
+soundOff = SOUND OFF
 
 ## welcome
 \`\`\`terminal
@@ -409,10 +414,16 @@ ejectDatabaseSlot3 = EJECT DATABASE SLOT 3
 ## help
 \`\`\`terminal
 @bright SYSTEM MANUAL
-@cyan LOAD DATABASE
-  Opens the database selector.
+@cyan ACCESS
+  Request elevated administrator privileges.
 @cyan EJECT ALL DATABASE
   Ejects every mounted database.
+@cyan LOAD DATABASE
+  Opens the database selector.
+@pagebreak
+@red ADMIN COMMANDS (requires ACCESS)
+@red FUZZY SEARCH - Search by partial match.
+@red LOAD STATUS / STATUS LOAD - Loads an editable status profile.
 \`\`\`
 
 ## boot.logo
