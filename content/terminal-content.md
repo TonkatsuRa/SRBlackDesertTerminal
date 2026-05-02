@@ -62,19 +62,30 @@ soundOff = SOUND OFF
 
 @amber WELCOME, AUTHORIZED PERSONNEL ASSET.
 
-This terminal provides controlled access to Black Desert
-Research Facility database, diagnostic, and status systems.
+@amber You are accessing the ARES MACROTECHNOLOGY
+@amber BLACK DESERT RESEARCH FACILITY terminal network.
 
-All employees are reminded that compliance is productivity.
-A rested worker is an underutilized resource.
-Productivity is margin. Margin is shareholder confidence.
+This system provides controlled access to facility database, diagnostic, logistics, and operational status functions. All activity is monitored for security, compliance, and performance optimization.
 
-Obey issued directives, fulfill assigned duties, and report
-facility anomalies before they become expensive.
+Remember:
+Compliance is productivity.
+Productivity is margin.
+Margin is confidence.
+Confidence is continuity.
 
-@red Ares values dedication, discretion, and replaceable efficiency.
-@red You are not just an employee. You are an appreciating asset until replacement.
-@red In unity, there is efficiency. In efficiency, there is profit. In profit, there is purpose.
+Report all anomalies before they escalate into liabilities. Unreported incidents will be interpreted as negligence. Repeated negligence will be interpreted as disloyalty.
+
+@amber Ares values dedication, discretion, and efficient replacement.
+Rest periods are authorized only when they preserve long-term output. Emotional distress should be logged through the appropriate channel and resolved without impact to mission deliverables.
+
+You are not merely an employee. You are an operational asset entrusted with shareholder confidence.
+
+@red In unity, there is efficiency.
+@red In efficiency, there is profit.
+@red In profit, there is purpose.
+
+@bright WELCOME BACK.
+@bright RESUME FUNCTION.
 
 @dim Use HELP for command guidance.
 @dim ═══════════════════════════════════════════════════════
