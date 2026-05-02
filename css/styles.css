@@ -287,8 +287,8 @@ body.low-power .glow {
 .menu-item {
     appearance: none;
     width: 100%;
-    height: clamp(30px, calc((var(--viewport-height) - 260px) / 12), 42px);
-    min-height: clamp(30px, calc((var(--viewport-height) - 260px) / 12), 42px);
+    height: clamp(28px, calc((var(--viewport-height) - 260px) / 13), 42px);
+    min-height: clamp(28px, calc((var(--viewport-height) - 260px) / 13), 42px);
     padding: 0 clamp(12px, 1.4vw, 20px);
     cursor: pointer;
     display: flex;

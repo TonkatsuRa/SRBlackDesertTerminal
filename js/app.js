@@ -1420,6 +1420,9 @@ function executeSelectedCommand() {
     AudioEngine.menuSelect();
     
     switch(cmd) {
+        case 'welcome':
+            showWelcome();
+            break;
         case 'help':
             showHelp();
             break;
