@@ -1,11 +1,25 @@
 # Terminal Content
 
 // This file controls editable text for index.html.
-// Use the section names and key names below. The terminal parser ignores lines
-// starting with #, //, or HTML comments, so these instructions never appear in UI.
-// For multi-line blocks, edit line1, line2, line3, etc. Keep numbering continuous.
-// Class names are optional terminal color classes: t-dim, t-bright, t-cyan, t-amber,
-// t-red, t-magenta. Leave a class blank for normal phosphor text.
+// HOW TO EDIT THIS FILE
+// The terminal ignores comments like these.
+// Simple settings use:
+// key = value
+//
+// Long visible text uses blocks between ```terminal and ```.
+// You do NOT need to write line1, line2, line3, etc.
+// In those blocks you can write normal text exactly as it should appear.
+// Do not put ``` inside visible text; it marks the end of a block.
+// Optional color hints go at the start of a line:
+// @dim, @bright, @cyan, @amber, @red, @magenta
+//
+// Example:
+// ## welcome
+// ```terminal
+// @bright BIG TITLE
+// Normal text line
+// @amber Warning text
+// ```
 
 ## terminal
 title = BLACK DESERT RESEARCH TERMINAL
@@ -27,113 +41,99 @@ loadStatus = LOAD STATUS
 list = LIST ALL
 fsearch = FUZZY SEARCH
 logout = LOGOUT
+loadDatabase = LOAD DATABASE
+loadFile = LOAD FILE
+ejectAllDatabase = EJECT ALL DATABASE
+ejectDatabaseSlot1 = EJECT DATABASE SLOT 1
+ejectDatabaseSlot2 = EJECT DATABASE SLOT 2
+ejectDatabaseSlot3 = EJECT DATABASE SLOT 3
+statusLoad = STATUS LOAD
+statusClear = STATUS CLEAR
+statusFormat = STATUS FORMAT
+soundOn = SOUND ON
+soundOff = SOUND OFF
 
 ## welcome
-line1 = ═══════════════════════════════════════════════════════
-class1 = t-dim
-line2 =               ARES MACROTECHNOLOGY
-class2 = t-bright
-line3 = ═══════════════════════════════════════════════════════
-class3 = t-dim
-line4 =
-line5 = WELCOME, AUTHORIZED PERSONNEL ASSET.
-class5 = t-amber
-line6 =
-line7 = This terminal provides controlled access to Black Desert
-line8 = Research Facility database, diagnostic, and status systems.
-line9 =
-line10 = All employees are reminded that compliance is productivity.
-line11 = Productivity is margin. Margin is shareholder confidence.
-line12 =
-line13 = Obey issued directives, fulfill assigned duties, and report
-line14 = facility anomalies before they become expensive.
-line15 =
-line16 = Ares values dedication, discretion, and replaceable efficiency.
-line17 =
-line18 = Use HELP for command guidance.
-class18 = t-dim
-line19 = ═══════════════════════════════════════════════════════
-class19 = t-dim
+```terminal
+@dim ═══════════════════════════════════════════════════════
+@bright               ARES MACROTECHNOLOGY
+@dim ═══════════════════════════════════════════════════════
+
+@amber WELCOME, AUTHORIZED PERSONNEL ASSET.
+
+This terminal provides controlled access to Black Desert
+Research Facility database, diagnostic, and status systems.
+
+All employees are reminded that compliance is productivity.
+Productivity is margin. Margin is shareholder confidence.
+
+Obey issued directives, fulfill assigned duties, and report
+facility anomalies before they become expensive.
+
+Ares values dedication, discretion, and replaceable efficiency.
+
+@dim Use HELP for command guidance.
+@dim ═══════════════════════════════════════════════════════
+```
 
 ## help
-line1 = ═══════════════════════════════════════════════════════
-class1 = t-dim
-line2 =                     SYSTEM MANUAL
-class2 = t-bright
-line3 = ═══════════════════════════════════════════════════════
-class3 = t-dim
-line4 =
-line5 = LOAD DATABASE
-class5 = t-cyan
-line6 =   Opens the in-terminal database selector.
-line7 =   Select a package, then enter that package password.
-line8 =   Up to three database packages can be mounted at once.
-line9 =   Available Commands: EJECT ALL DATABASE / EJECT DATABASE SLOT 1-3
-line10 =
-line11 = SEARCH
-class11 = t-cyan
-line12 =   Query database by exact entry title or entry id.
-line13 =   Example: SEARCH perimeter-drone
-line14 =
-line15 = CATEGORIES
-class15 = t-cyan
-line16 =   Displays all available categories and visible entry counts.
-line17 =
-line18 = CLEAR
-class18 = t-cyan
-line19 =   Clears the display area. Loaded data remains active.
-line20 =
-line21 = DIAGNOSTIC
-class21 = t-cyan
-line22 =   Opens current base diagnostic dashboard.
-line23 =
-line24 = FACILITY STATUS
-class24 = t-cyan
-line25 =   Opens abstract wireframe overview of facility zones.
-line26 =
-line27 = ACCESS
-class27 = t-cyan
-line28 =   Request elevated administrator privileges.
-line29 =
-line30 = ───────────────────────────────────────────────────────
-class30 = t-dim
-line31 = ADMIN COMMANDS (requires ACCESS)
-class31 = t-red
-line32 = ───────────────────────────────────────────────────────
-class32 = t-dim
-line33 =
-line34 = LOAD STATUS / STATUS LOAD
-class34 = t-red
-line35 =   Loads a .txt, .md, or encrypted .dat status profile.
-line36 =   Restarts the terminal and revokes admin access after loading.
-line37 =
-line38 = LIST ALL
-class38 = t-red
-line39 =   Displays complete database index including confidential entries.
-line40 =
-line41 = FUZZY SEARCH
-class41 = t-red
-line42 =   Search by partial match in title, id, tags, or body.
-line43 =
-line44 = LOGOUT
-class44 = t-red
-line45 =   Terminate administrator session.
-line46 =
-line47 =
-line48 = EJECT ALL DATABASE
-class48 = t-cyan
-line49 =   Ejects every mounted database package.
-line50 =
-line51 = EJECT DATABASE SLOT 1 / 2 / 3
-class51 = t-cyan
-line52 =   Ejects one mounted database slot so another package can be loaded.
-line53 =
-line54 = ═══════════════════════════════════════════════════════
-class54 = t-dim
-line55 = Navigation: ↑↓ Menu | ←→ Pages | Enter Select
-class55 = t-dim
-line56 = ═══════════════════════════════════════════════════════
-class56 = t-dim
+```terminal
+@dim ═══════════════════════════════════════════════════════
+@bright                     SYSTEM MANUAL
+@dim ═══════════════════════════════════════════════════════
+
+@cyan LOAD DATABASE
+  Opens the in-terminal database selector.
+  Select a package, then enter that package password.
+  Up to three database packages can be mounted at once.
+  Available Commands: EJECT ALL DATABASE / EJECT DATABASE SLOT 1-3
+
+@cyan SEARCH
+  Query database by exact entry title or entry id.
+  Example: SEARCH perimeter-drone
+
+@cyan CATEGORIES
+  Displays all available categories and visible entry counts.
+
+@cyan CLEAR
+  Clears the display area. Loaded data remains active.
+
+@cyan DIAGNOSTIC
+  Opens current base diagnostic dashboard.
+
+@cyan FACILITY STATUS
+  Opens abstract wireframe overview of facility zones.
+
+@cyan ACCESS
+  Request elevated administrator privileges.
+
+@dim ───────────────────────────────────────────────────────
+@red ADMIN COMMANDS (requires ACCESS)
+@dim ───────────────────────────────────────────────────────
+
+@red LOAD STATUS / STATUS LOAD
+  Loads a .txt, .md, or encrypted .dat status profile.
+  Restarts the terminal and revokes admin access after loading.
+
+@red LIST ALL
+  Displays complete database index including confidential entries.
+
+@red FUZZY SEARCH
+  Search by partial match in title, id, tags, or body.
+
+@red LOGOUT
+  Terminate administrator session.
+
+@cyan EJECT ALL DATABASE
+  Ejects every mounted database package.
+
+@cyan EJECT DATABASE SLOT 1 / 2 / 3
+  Ejects one mounted database slot so another package can be loaded.
+
+@dim ═══════════════════════════════════════════════════════
+@dim Navigation: ↑↓ Menu | ←→ Pages | Enter Select
+@dim ═══════════════════════════════════════════════════════
+```
 
 ## errors
 no_database = ERROR: No database loaded.
@@ -151,13 +151,15 @@ access_denied = ACCESS DENIED
 logout = ADMINISTRATOR SESSION TERMINATED
 
 ## boot.logo
-line1 = "        █████╗ ██████╗ ███████╗███████╗"
-line2 = "       ██╔══██╗██╔══██╗██╔════╝██╔════╝"
-line3 = "       ███████║██████╔╝█████╗  ███████╗"
-line4 = "       ██╔══██║██╔══██╗██╔══╝  ╚════██║"
-line5 = "       ██║  ██║██║  ██║███████╗███████║"
-line6 = "       ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚══════╝"
-line7 = "         MACROTECHNOLOGY SYSTEMS"
+```terminal
+        █████╗ ██████╗ ███████╗███████╗
+       ██╔══██╗██╔══██╗██╔════╝██╔════╝
+       ███████║██████╔╝█████╗  ███████╗
+       ██╔══██║██╔══██╗██╔══╝  ╚════██║
+       ██║  ██║██║  ██║███████╗███████║
+       ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚══════╝
+         MACROTECHNOLOGY SYSTEMS
+```
 
 // Boot steps can be edited or reordered by changing the numeric section ids.
 // type can be line, blank, pause, section, or check.
@@ -418,11 +420,13 @@ level = 69
 surface = DISCONNECTED
 relay = FAILED / NO CARRIER
 drone = DEGRADED 77%
-line1 = FACILITY BUS : LOCAL ONLY {spinner}
-line2 = LOCAL MESH   : {bar:diagnostic.network.level:18}
-line3 = SURFACE NET  : DISCONNECTED
-line4 = EXT RELAY    : FAILED / NO CARRIER
-line5 = DRONE UPLINK : DEGRADED 77%
+```terminal
+FACILITY BUS : LOCAL ONLY {spinner}
+LOCAL MESH   : {bar:diagnostic.network.level:18}
+SURFACE NET  : DISCONNECTED
+EXT RELAY    : FAILED / NO CARRIER
+DRONE UPLINK : DEGRADED 77%
+```
 
 ## diagnostic.security
 state = warn
@@ -432,11 +436,13 @@ protocol = ENGAGED
 defense = ARMED
 intrusion = ARMED / NO BREACH
 vault = SEALED / SERVO-3 SLOW
-line1 = PERIMETER    : {bar:diagnostic.security.level:18}
-line2 = SEC PROTOCOL : ENGAGED
-line3 = AUTO DEFENSE : ARMED
-line4 = INTRUSION    : ARMED / NO BREACH
-line5 = VAULT DOORS  : SEALED / SERVO-3 SLOW
+```terminal
+PERIMETER    : {bar:diagnostic.security.level:18}
+SEC PROTOCOL : ENGAGED
+AUTO DEFENSE : ARMED
+INTRUSION    : ARMED / NO BREACH
+VAULT DOORS  : SEALED / SERVO-3 SLOW
+```
 
 ## diagnostic.outposts
 state = warn
@@ -445,11 +451,13 @@ drone = DEGRADED 77%
 mesh = WEAK SIGNAL
 outpost1 = PARTIAL MESH  188ms
 outpost4 = NO CARRIER    ----
-line1 = LINK SWEEP   : {sweep:22}
-line2 = DRONE UPLINK : DEGRADED 77%
-line3 = MESH NETWORK : WEAK SIGNAL
-line4 = OUTPOST-01   : PARTIAL MESH  188ms
-line5 = OUTPOST-04   : NO CARRIER    ----
+```terminal
+LINK SWEEP   : {sweep:22}
+DRONE UPLINK : DEGRADED 77%
+MESH NETWORK : WEAK SIGNAL
+OUTPOST-01   : PARTIAL MESH  188ms
+OUTPOST-04   : NO CARRIER    ----
+```
 
 ## diagnostic.generator
 state = warn
@@ -458,11 +466,13 @@ level = 62
 core = RUNNING HOT
 temp = 451K ABOVE NOMINAL
 coolant = FLOW LOW / FILTER CLOG
-line1 = CORE-A {spinner}      : RUNNING HOT
-line2 = TURBINE RPM  : {bar:diagnostic.generator.level:18}
-line3 = TEMP         : 451K ABOVE NOMINAL
-line4 = LOAD BUS     : {sweep:22}
-line5 = COOLANT      : FLOW LOW / FILTER CLOG
+```terminal
+CORE-A {spinner}      : RUNNING HOT
+TURBINE RPM  : {bar:diagnostic.generator.level:18}
+TEMP         : 451K ABOVE NOMINAL
+LOAD BUS     : {sweep:22}
+COOLANT      : FLOW LOW / FILTER CLOG
+```
 
 ## diagnostic.power
 state = warn
@@ -472,11 +482,13 @@ reserve = 34
 bat_a = [####------] 3.2h
 bat_b = [###-------] 2.6h
 capacitor = UNEVEN CHARGE ...
-line1 = MAIN GRID    : {bar:diagnostic.power.main:20}
-line2 = RESERVE CELL : {bar:diagnostic.power.reserve:20}
-line3 = BAT-A        : [####------] 3.2h
-line4 = BAT-B        : [###-------] 2.6h
-line5 = CAPACITOR    : UNEVEN CHARGE ...
+```terminal
+MAIN GRID    : {bar:diagnostic.power.main:20}
+RESERVE CELL : {bar:diagnostic.power.reserve:20}
+BAT-A        : [####------] 3.2h
+BAT-B        : [###-------] 2.6h
+CAPACITOR    : UNEVEN CHARGE ...
+```
 
 ## diagnostic.alarm
 state = malfunction
@@ -485,11 +497,13 @@ station = AMBER MAINTENANCE
 dis = DEGRADED / 02 BLIND
 biohazard = CLEAR / SAMPLE LOCK DUE
 containment = ZONE C-12 SEAL DRIFT
-line1 = STATION ALARM: AMBER MAINTENANCE
-line2 = DIS SENSORS  : DEGRADED / 02 BLIND
-line3 = BIOHAZARD    : CLEAR / SAMPLE LOCK DUE
-line4 = CONTAINMENT  : ZONE C-12 SEAL DRIFT
-line5 = SIREN BUS    : {sweep:22}
+```terminal
+STATION ALARM: AMBER MAINTENANCE
+DIS SENSORS  : DEGRADED / 02 BLIND
+BIOHAZARD    : CLEAR / SAMPLE LOCK DUE
+CONTAINMENT  : ZONE C-12 SEAL DRIFT
+SIREN BUS    : {sweep:22}
+```
 
 ## diagnostic.life
 state = alert
@@ -497,9 +511,11 @@ status = 3 UNKNOWN
 known = 14
 unstable = 2
 unknown = 3
-line1 = BIO COUNT    : 14 CONFIRMED / 02 UNSTABLE / 03 UNKNOWN
-line2 = HEARTBEAT    : {heartbeat:38}
-line3 = UNKNOWN TRACE: SERVICE TUNNEL / CONTAINMENT ACCESS
+```terminal
+BIO COUNT    : 14 CONFIRMED / 02 UNSTABLE / 03 UNKNOWN
+HEARTBEAT    : {heartbeat:38}
+UNKNOWN TRACE: SERVICE TUNNEL / CONTAINMENT ACCESS
+```
 
 ## facility
 title = FACILITY STATUS
@@ -518,26 +534,32 @@ reserve = 34
 repair = 06 OPEN
 
 ## facility.overview
-line1 = GRID ID     : BDR-01
-line2 = STRUCTURE   : {bar:facility.grid.structure:12}
-line3 = POWER BUS   : {bar:facility.grid.power:12}
-line4 = RESERVE     : {bar:facility.grid.reserve:12}
-line5 = REPAIR IDX  : 06 OPEN
+```terminal
+GRID ID     : BDR-01
+STRUCTURE   : {bar:facility.grid.structure:12}
+POWER BUS   : {bar:facility.grid.power:12}
+RESERVE     : {bar:facility.grid.reserve:12}
+REPAIR IDX  : 06 OPEN
+```
 
 ## facility.zones
-line1 = CMD CORE   NOMINAL   78%
-line2 = LAB ARC    SEAL DRFT 64%
-line3 = GEN PLANT  SERVICE   61%
-line4 = HAB RING   LOW HEAT  67%
-line5 = CNTM CELL  WATCH     58%
-line6 = SVC BUS    UNK TRACE 47%
+```terminal
+CMD CORE   NOMINAL   78%
+LAB ARC    SEAL DRFT 64%
+GEN PLANT  SERVICE   61%
+HAB RING   LOW HEAT  67%
+CNTM CELL  WATCH     58%
+SVC BUS    UNK TRACE 47%
+```
 
 ## facility.contact_readout
-line1 = KNOWN BIO   : 14
-line2 = UNKNOWN BIO : 03 MOVING
-line3 = CAM GRID    : 05/12 DIRTY
-line4 = FAULTS      : PUMP2 DOOR-C RLY04
-line5 = TRACE       : {sweep:16}
+```terminal
+KNOWN BIO   : 14
+UNKNOWN BIO : 03 MOVING
+CAM GRID    : 05/12 DIRTY
+FAULTS      : PUMP2 DOOR-C RLY04
+TRACE       : {sweep:16}
+```
 
 ## facility.contacts
 known = 14

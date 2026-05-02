@@ -2540,12 +2540,51 @@ function cleanStatusValue(value) {
     return cleaned.replace(/\\n/g, '\n');
 }
 
+function parseTerminalBlockLine(rawLine) {
+    const styles = {
+        dim: 't-dim',
+        bright: 't-bright',
+        cyan: 't-cyan',
+        amber: 't-amber',
+        red: 't-red',
+        magenta: 't-magenta'
+    };
+    const match = String(rawLine ?? '').match(/^@([a-z]+)\s?(.*)$/i);
+    if (!match) return { text: String(rawLine ?? ''), className: '' };
+    const className = styles[match[1].toLowerCase()];
+    return className
+        ? { text: match[2], className }
+        : { text: String(rawLine ?? ''), className: '' };
+}
+
 function parseStatusProfile(content, source) {
     const values = {};
     let section = '';
+    let blockSection = '';
+    let blockLine = 1;
+    let inTextBlock = false;
 
     String(content || '').replace(/\r/g, '').split('\n').forEach(rawLine => {
         let line = rawLine.trim();
+
+        if (line.startsWith('```')) {
+            inTextBlock = !inTextBlock;
+            if (inTextBlock) {
+                blockSection = section;
+                blockLine = 1;
+            }
+            return;
+        }
+
+        if (inTextBlock) {
+            if (!blockSection) return;
+            const parsed = parseTerminalBlockLine(rawLine);
+            values[`${blockSection}.line${blockLine}`] = parsed.text;
+            if (parsed.className) values[`${blockSection}.class${blockLine}`] = parsed.className;
+            blockLine++;
+            return;
+        }
+
         if (!line || line === '---') return;
 
         const iniSection = line.match(/^\[([a-z0-9_.\-\s]+)\]$/i);

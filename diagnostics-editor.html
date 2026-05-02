@@ -359,7 +359,7 @@
                 <label>Editable terminal-content.md
                     <textarea id="rawMarkdown" spellcheck="false"></textarea>
                 </label>
-                <p class="note">Use APPLY FORMS before downloading if you changed structured fields. You can also edit this raw Markdown directly, then use RELOAD FORMS to refresh the fields.</p>
+                <p class="note">Use APPLY FORMS before downloading if you changed structured fields. Long text uses ```terminal blocks, so you can write normal lines without line1/line2 keys. You can also edit this raw Markdown directly, then use RELOAD FORMS to refresh the fields.</p>
             </section>
         </div>
 
@@ -391,20 +391,35 @@ loadStatus = LOAD STATUS
 list = LIST ALL
 fsearch = FUZZY SEARCH
 logout = LOGOUT
+loadDatabase = LOAD DATABASE
+loadFile = LOAD FILE
+ejectAllDatabase = EJECT ALL DATABASE
+ejectDatabaseSlot1 = EJECT DATABASE SLOT 1
+ejectDatabaseSlot2 = EJECT DATABASE SLOT 2
+ejectDatabaseSlot3 = EJECT DATABASE SLOT 3
 
 ## welcome
-line1 = ═══════════════════════════════════════════════════════
-line2 =              ARES MACROTECHNOLOGY
-line3 = WELCOME, AUTHORIZED PERSONNEL ASSET.
-line4 = Use HELP for command guidance.
+\`\`\`terminal
+@dim ═══════════════════════════════════════════════════════
+@bright              ARES MACROTECHNOLOGY
+@amber WELCOME, AUTHORIZED PERSONNEL ASSET.
+@dim Use HELP for command guidance.
+\`\`\`
 
 ## help
-line1 = SYSTEM MANUAL
-line2 = LOAD DATABASE opens the database selector.
+\`\`\`terminal
+@bright SYSTEM MANUAL
+@cyan LOAD DATABASE
+  Opens the database selector.
+@cyan EJECT ALL DATABASE
+  Ejects every mounted database.
+\`\`\`
 
 ## boot.logo
-line1 = ARES
-line2 = MACROTECHNOLOGY SYSTEMS
+\`\`\`terminal
+ARES
+MACROTECHNOLOGY SYSTEMS
+\`\`\`
 
 ## diagnostic
 title = BASE DIAGNOSTIC
@@ -423,7 +438,9 @@ life = LIFE SIGNS
 state = alert
 status = DISCONNECTED
 level = 69
-line1 = FACILITY BUS : LOCAL ONLY {spinner}
+\`\`\`terminal
+FACILITY BUS : LOCAL ONLY {spinner}
+\`\`\`
 
 ## facility
 title = FACILITY STATUS
@@ -441,7 +458,14 @@ repair = 06 OPEN
             ['facility', 'Facility Status'], ['load', 'Load Database'], ['search', 'Search'],
             ['categories', 'Categories'], ['clear', 'Clear'], ['access', 'Access'],
             ['loadStatus', 'Load Status'], ['list', 'List All'], ['fsearch', 'Fuzzy Search'],
-            ['logout', 'Logout']
+            ['logout', 'Logout'], ['loadDatabase', 'Typed: LOAD DATABASE'],
+            ['loadFile', 'Typed: LOAD FILE'], ['ejectAllDatabase', 'Typed: EJECT ALL DATABASE'],
+            ['ejectDatabaseSlot1', 'Typed: EJECT DATABASE SLOT 1'],
+            ['ejectDatabaseSlot2', 'Typed: EJECT DATABASE SLOT 2'],
+            ['ejectDatabaseSlot3', 'Typed: EJECT DATABASE SLOT 3'],
+            ['statusLoad', 'Typed: STATUS LOAD'], ['statusClear', 'Typed: STATUS CLEAR'],
+            ['statusFormat', 'Typed: STATUS FORMAT'], ['soundOn', 'Typed: SOUND ON'],
+            ['soundOff', 'Typed: SOUND OFF']
         ];
 
         const DIAGNOSTICS = [
@@ -467,11 +491,47 @@ repair = 06 OPEN
             return cleaned.replace(/\\n/g, '\n');
         }
 
+        function parseTerminalBlockLine(rawLine) {
+            const styles = {
+                dim: 't-dim',
+                bright: 't-bright',
+                cyan: 't-cyan',
+                amber: 't-amber',
+                red: 't-red',
+                magenta: 't-magenta'
+            };
+            const match = String(rawLine ?? '').match(/^@([a-z]+)\s?(.*)$/i);
+            if (!match) return { text: String(rawLine ?? ''), className: '' };
+            const className = styles[match[1].toLowerCase()];
+            return className
+                ? { text: match[2], className }
+                : { text: String(rawLine ?? ''), className: '' };
+        }
+
         function parseProfile(text) {
             const values = {};
             let section = '';
+            let blockSection = '';
+            let blockLine = 1;
+            let inTextBlock = false;
             String(text || '').replace(/\r/g, '').split('\n').forEach(rawLine => {
                 let line = rawLine.trim();
+                if (line.startsWith('```')) {
+                    inTextBlock = !inTextBlock;
+                    if (inTextBlock) {
+                        blockSection = section;
+                        blockLine = 1;
+                    }
+                    return;
+                }
+                if (inTextBlock) {
+                    if (!blockSection) return;
+                    const parsed = parseTerminalBlockLine(rawLine);
+                    values[`${blockSection}.line${blockLine}`] = parsed.text;
+                    if (parsed.className) values[`${blockSection}.class${blockLine}`] = parsed.className;
+                    blockLine++;
+                    return;
+                }
                 if (!line || line === '---') return;
                 const sectionMatch = line.match(/^#{2,6}\s+([a-z0-9_.-]+)\s*$/i) || line.match(/^\[([a-z0-9_.\-\s]+)\]$/i);
                 if (sectionMatch) {
@@ -494,12 +554,26 @@ repair = 06 OPEN
             return value === undefined ? fallback : value;
         }
 
-        function collectLines(values, section, max = 80) {
+        function classToMarker(className) {
+            const markers = {
+                't-dim': '@dim',
+                't-bright': '@bright',
+                't-cyan': '@cyan',
+                't-amber': '@amber',
+                't-red': '@red',
+                't-magenta': '@magenta'
+            };
+            return markers[className] || '';
+        }
+
+        function collectLines(values, section, max = 80, includeStyles = false) {
             const lines = [];
             for (let i = 1; i <= max; i++) {
                 const key = `${section}.line${i}`;
                 if (Object.prototype.hasOwnProperty.call(values, normalizeKey(key))) {
-                    lines.push(getValue(values, key));
+                    const line = getValue(values, key);
+                    const marker = includeStyles ? classToMarker(getValue(values, `${section}.class${i}`, '')) : '';
+                    lines.push(marker ? `${marker} ${line}` : line);
                 }
             }
             return lines.join('\n');
@@ -537,7 +611,7 @@ repair = 06 OPEN
         }
 
         function lineSectionFromTextarea(textarea) {
-            return textarea.value.split('\n').map((line, index) => `line${index + 1} = ${line}`);
+            return ['```terminal', ...textarea.value.split('\n'), '```'];
         }
 
         function applyFormChanges() {
@@ -595,9 +669,9 @@ repair = 06 OPEN
             COMMANDS.forEach(([id, label]) => {
                 byId(`cmd-${id}`).value = getValue(values, `commands.${id}`, label.toUpperCase());
             });
-            els.welcomeText.value = collectLines(values, 'welcome');
-            els.helpText.value = collectLines(values, 'help');
-            els.bootLogo.value = collectLines(values, 'boot.logo', 20);
+            els.welcomeText.value = collectLines(values, 'welcome', 120, true);
+            els.helpText.value = collectLines(values, 'help', 120, true);
+            els.bootLogo.value = collectLines(values, 'boot.logo', 20, true);
             els.diagnosticTitle.value = getValue(values, 'diagnostic.title', 'BASE DIAGNOSTIC');
             els.diagnosticTicker.value = getValue(values, 'diagnostic.ticker', '');
 
@@ -606,7 +680,7 @@ repair = 06 OPEN
                 byId(`diag-state-${id}`).value = getValue(values, `diagnostic.${id}.state`, 'warn');
                 byId(`diag-status-${id}`).value = getValue(values, `diagnostic.${id}.status`, 'CHECK');
                 byId(`diag-level-${id}`).value = getValue(values, `diagnostic.${id}.level`, '50');
-                byId(`diag-lines-${id}`).value = collectLines(values, `diagnostic.${id}`, 12);
+                byId(`diag-lines-${id}`).value = collectLines(values, `diagnostic.${id}`, 12, true);
             });
 
             els.facilityTitle.value = getValue(values, 'facility.title', 'FACILITY STATUS');
@@ -615,9 +689,9 @@ repair = 06 OPEN
             els.facilityPower.value = getValue(values, 'facility.grid.power', '61');
             els.facilityReserve.value = getValue(values, 'facility.grid.reserve', '34');
             els.facilityRepair.value = getValue(values, 'facility.grid.repair', '06 OPEN');
-            els.facilityOverview.value = collectLines(values, 'facility.overview', 12);
-            els.facilityZones.value = collectLines(values, 'facility.zones', 12);
-            els.facilityContacts.value = collectLines(values, 'facility.contact_readout', 12);
+            els.facilityOverview.value = collectLines(values, 'facility.overview', 12, true);
+            els.facilityZones.value = collectLines(values, 'facility.zones', 12, true);
+            els.facilityContacts.value = collectLines(values, 'facility.contact_readout', 12, true);
             renderPreview();
         }
 
