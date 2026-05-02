@@ -229,7 +229,20 @@
                 <section class="content-panel" aria-label="Terminal output">
                     <div class="content-toolbar">
                         <span>SESSION: <span class="t-amber">ACTIVE</span></span>
-                        <span class="page-indicator" id="pageIndicator"></span>
+                        <div class="toolbar-right">
+                            <span class="page-indicator" id="pageIndicator"></span>
+                            <div class="database-slot-controls" id="databaseSlotControls" aria-label="Loaded database slots">
+                                <button class="database-slot-button empty" type="button" data-slot="0" aria-label="Database slot 1 empty" title="Database slot 1">
+                                    <span aria-hidden="true">▣</span>
+                                </button>
+                                <button class="database-slot-button empty" type="button" data-slot="1" aria-label="Database slot 2 empty" title="Database slot 2">
+                                    <span aria-hidden="true">▣</span>
+                                </button>
+                                <button class="database-slot-button empty" type="button" data-slot="2" aria-label="Database slot 3 empty" title="Database slot 3">
+                                    <span aria-hidden="true">▣</span>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                     <div class="content-viewport" id="contentViewport">
                         <div class="content-area" id="contentArea">

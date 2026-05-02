@@ -580,6 +580,15 @@ let database = {};
 let databaseEntries = [];
 let databaseLoaded = false;
 let databaseSource = 'NO DATABASE';
+const DATABASE_SLOT_COUNT = 3;
+let databaseSlots = Array.from({ length: DATABASE_SLOT_COUNT }, (_, index) => ({
+    index,
+    loaded: false,
+    source: '',
+    file: '',
+    metadata: {},
+    entries: []
+}));
 let databaseManifest = null;
 let databaseManifestSource = 'unloaded';
 let activeDatabaseSelection = null;
@@ -1325,6 +1334,7 @@ function bootStatusClass(status) {
 function initTerminal() {
     showWelcome();
     updateMenuSelection();
+    updateDatabaseSlotIndicators();
     const startHologram = () => initHologram();
     if (window.requestIdleCallback && !prefersReducedMotion) {
         window.requestIdleCallback(startHologram, { timeout: 900 });
@@ -1344,6 +1354,12 @@ function initTerminal() {
                 selectedMenuIndex = index;
                 updateMenuSelection();
                 executeSelectedCommand();
+            });
+        });
+        document.querySelectorAll('.database-slot-button[data-slot]').forEach(button => {
+            button.addEventListener('click', () => {
+                const slotIndex = Number.parseInt(button.dataset.slot || '0', 10);
+                showDatabaseSlotDialog(slotIndex);
             });
         });
         menuHandlersBound = true;
@@ -1824,6 +1840,45 @@ function printNoDatabaseLoaded() {
     print('');
 }
 
+function printDatabaseSlotsFull() {
+    AudioEngine.errorBuzz();
+    clearOutput();
+    print('');
+    print('DATABASE SLOT CAPACITY REACHED', 't-red');
+    print('Three database packages are already mounted.', 't-dim');
+    print('Eject a slot before loading another package.', 't-amber');
+    print('Commands: EJECT DATABASE SLOT 1 / 2 / 3 or EJECT ALL DATABASE', 't-dim');
+    print('');
+}
+
+function handleEjectCommand(args) {
+    const request = normalizeStatusKey(args).replace(/_/g, ' ');
+    if (!request) {
+        clearOutput();
+        print('');
+        print('Usage: EJECT ALL DATABASE or EJECT DATABASE SLOT 1', 't-amber');
+        print('');
+        return;
+    }
+
+    if (['all database', 'all databases', 'database all', 'databases all'].includes(request)) {
+        ejectAllDatabases();
+        return;
+    }
+
+    const slotMatch = request.match(/(?:database\s+)?slot\s+([123])$/) || request.match(/database\s+([123])$/);
+    if (slotMatch) {
+        ejectDatabaseSlot(Number.parseInt(slotMatch[1], 10) - 1);
+        return;
+    }
+
+    clearOutput();
+    print('');
+    print('EJECT COMMAND NOT RECOGNIZED', 't-red');
+    print('Use EJECT ALL DATABASE or EJECT DATABASE SLOT 1 / 2 / 3.', 't-dim');
+    print('');
+}
+
 function processCommand(input) {
     const parts = input.trim().split(/\s+/);
     const command = parts[0].toLowerCase();
@@ -1855,12 +1910,21 @@ function processCommand(input) {
     }
 
     if (command === 'load' && args.toLowerCase() === 'file') {
+        if (databaseCapacityFull()) {
+            printDatabaseSlotsFull();
+            return;
+        }
         document.getElementById('fileInput').click();
         return;
     }
 
     if (command === 'load' && (!args || args.toLowerCase() === 'database')) {
         showDatabaseSelector();
+        return;
+    }
+
+    if (command === 'eject') {
+        handleEjectCommand(args);
         return;
     }
     
@@ -2010,7 +2074,14 @@ function showHelp() {
     print('LOAD DATABASE', 't-cyan');
     print('  Opens the in-terminal database selector.');
     print('  Select a package, then enter that package password.');
+    print('  Up to three database packages can be mounted at once.');
     print('  Local .md, .txt, or .dat fallback is still available with LOAD FILE.');
+    print('');
+    print('EJECT ALL DATABASE', 't-cyan');
+    print('  Ejects every mounted database package.');
+    print('');
+    print('EJECT DATABASE SLOT 1 / 2 / 3', 't-cyan');
+    print('  Ejects one mounted database slot so another package can be loaded.');
     print('');
     print('SEARCH', 't-cyan');
     print('  Query database by exact entry title.');
@@ -2189,6 +2260,209 @@ function printEntry(entry) {
     print('');
 }
 
+function databaseCapacityFull() {
+    return databaseSlots.every(slot => slot.loaded);
+}
+
+function firstEmptyDatabaseSlotIndex() {
+    return databaseSlots.findIndex(slot => !slot.loaded);
+}
+
+function databaseSlotDisplayName(slot) {
+    if (!slot || !slot.loaded) return 'NO DATABASE LOADED';
+    return slot.source || slot.file || slot.metadata?.title || `DATABASE SLOT ${slot.index + 1}`;
+}
+
+function mountParsedDatabase(parsed, item = {}, path = '') {
+    const slotIndex = firstEmptyDatabaseSlotIndex();
+    if (slotIndex < 0) {
+        printDatabaseSlotsFull();
+        return false;
+    }
+
+    const source = parsed.metadata.title || item.displayName || parsed.source || item.file || path || 'MARKDOWN DATABASE';
+    const file = item.file || item.filename || path || parsed.source || source;
+    const entries = parsed.entries.map(entry => ({
+        ...entry,
+        databaseSlot: slotIndex + 1,
+        databaseSource: source,
+        databaseFile: file
+    }));
+
+    databaseSlots[slotIndex] = {
+        index: slotIndex,
+        loaded: true,
+        source,
+        file,
+        metadata: { ...parsed.metadata },
+        entries
+    };
+
+    rebuildDatabaseIndex();
+    AudioEngine.dataLoaded();
+    clearOutput();
+    print('');
+    print('DATABASE AUTHENTICATED', 't-cyan');
+    print(`Slot ${slotIndex + 1}: ${source}`, 't-amber');
+    print(`Entries loaded: ${entries.length}`, 't-cyan');
+    print(`Mounted packages: ${databaseSlots.filter(slot => slot.loaded).length}/${DATABASE_SLOT_COUNT}`, 't-dim');
+    print('');
+    print('Use SEARCH, CATEGORIES, or admin LIST ALL to explore.', 't-dim');
+    print('');
+    return true;
+}
+
+function rebuildDatabaseIndex() {
+    database = {};
+    databaseEntries = [];
+    databaseSlots.forEach(slot => {
+        if (!slot.loaded) return;
+        slot.entries.forEach(entry => {
+            databaseEntries.push(entry);
+            const titleKey = String(entry.title || '').toLowerCase();
+            if (titleKey && !database[titleKey]) database[titleKey] = entry;
+            const idKey = String(entry.id || '').toLowerCase();
+            if (idKey && !database[idKey]) database[idKey] = entry;
+        });
+    });
+
+    databaseLoaded = databaseEntries.length > 0;
+    databaseSource = databaseSlots
+        .filter(slot => slot.loaded)
+        .map(slot => databaseSlotDisplayName(slot))
+        .join(', ') || 'NO DATABASE';
+    updateEntryCount();
+    updateDatabaseSlotIndicators();
+}
+
+function updateDatabaseSlotIndicators() {
+    databaseSlots.forEach((slot, index) => {
+        const button = document.querySelector(`.database-slot-button[data-slot="${index}"]`);
+        if (!button) return;
+        button.classList.toggle('loaded', slot.loaded);
+        button.classList.toggle('empty', !slot.loaded);
+        button.title = slot.loaded
+            ? `Slot ${index + 1}: ${databaseSlotDisplayName(slot)}`
+            : `Slot ${index + 1}: empty`;
+        button.setAttribute('aria-label', slot.loaded
+            ? `Database slot ${index + 1} loaded: ${databaseSlotDisplayName(slot)}`
+            : `Database slot ${index + 1} empty`);
+    });
+}
+
+function showDatabaseSlotDialog(slotIndex) {
+    const safeIndex = Math.max(0, Math.min(DATABASE_SLOT_COUNT - 1, Number.parseInt(slotIndex, 10) || 0));
+    const slot = databaseSlots[safeIndex];
+    const { body } = createDatabaseModal(`DATABASE SLOT ${safeIndex + 1}`);
+    body.textContent = '';
+
+    const status = document.createElement('p');
+    status.className = `database-modal-copy ${slot.loaded ? 't-cyan' : 't-red'}`;
+    status.textContent = slot.loaded ? 'STATUS: DATABASE LOADED' : 'STATUS: NO DATABASE LOADED';
+
+    const details = document.createElement('pre');
+    details.className = 'database-slot-details';
+    details.textContent = slot.loaded
+        ? [
+            `SLOT        : ${safeIndex + 1}`,
+            `DATABASE    : ${databaseSlotDisplayName(slot)}`,
+            `FILE        : ${slot.file || 'UNKNOWN'}`,
+            `ENTRIES     : ${slot.entries.length}`,
+            `CLEARANCE   : ${slot.metadata.password ? 'PASSWORD GATED' : 'OPEN'}`
+        ].join('\n')
+        : [
+            `SLOT        : ${safeIndex + 1}`,
+            'DATABASE    : NONE',
+            'ENTRIES     : 0',
+            'STATUS      : EMPTY / READY'
+        ].join('\n');
+
+    const actions = document.createElement('div');
+    actions.className = 'database-modal-actions';
+    const abort = document.createElement('button');
+    abort.className = 'database-modal-action secondary';
+    abort.type = 'button';
+    abort.textContent = 'ABORT';
+    abort.addEventListener('click', closeDatabaseModal);
+    const eject = document.createElement('button');
+    eject.className = 'database-modal-action';
+    eject.type = 'button';
+    eject.textContent = 'EJECT DATABASE';
+    eject.disabled = !slot.loaded;
+    eject.addEventListener('click', () => {
+        ejectDatabaseSlot(safeIndex);
+        closeDatabaseModal();
+    });
+    actions.append(abort, eject);
+    body.append(status, details, actions);
+    abort.focus();
+}
+
+function ejectDatabaseSlot(slotIndex, options = {}) {
+    const safeIndex = Number.parseInt(slotIndex, 10);
+    if (!Number.isFinite(safeIndex) || safeIndex < 0 || safeIndex >= DATABASE_SLOT_COUNT) return false;
+    const slot = databaseSlots[safeIndex];
+    if (!slot.loaded) {
+        if (!options.silent) {
+            AudioEngine.errorBuzz();
+            clearOutput();
+            print('');
+            print(`DATABASE SLOT ${safeIndex + 1} IS EMPTY`, 't-amber');
+            print('');
+        }
+        return false;
+    }
+
+    const source = databaseSlotDisplayName(slot);
+    databaseSlots[safeIndex] = {
+        index: safeIndex,
+        loaded: false,
+        source: '',
+        file: '',
+        metadata: {},
+        entries: []
+    };
+    rebuildDatabaseIndex();
+    AudioEngine.pageFlip();
+    if (!options.silent) {
+        clearOutput();
+        print('');
+        print(`DATABASE SLOT ${safeIndex + 1} EJECTED`, 't-amber');
+        print(`Database: ${source}`, 't-dim');
+        print(`Mounted packages: ${databaseSlots.filter(item => item.loaded).length}/${DATABASE_SLOT_COUNT}`, 't-cyan');
+        print('');
+    }
+    return true;
+}
+
+function ejectAllDatabases() {
+    const loadedCount = databaseSlots.filter(slot => slot.loaded).length;
+    if (!loadedCount) {
+        AudioEngine.errorBuzz();
+        clearOutput();
+        print('');
+        print('NO DATABASES LOADED', 't-amber');
+        print('');
+        return;
+    }
+
+    databaseSlots = databaseSlots.map((slot, index) => ({
+        index,
+        loaded: false,
+        source: '',
+        file: '',
+        metadata: {},
+        entries: []
+    }));
+    rebuildDatabaseIndex();
+    AudioEngine.pageFlip();
+    clearOutput();
+    print('');
+    print('ALL DATABASE SLOTS EJECTED', 't-amber');
+    print(`Packages ejected: ${loadedCount}`, 't-dim');
+    print('');
+}
+
 // ========================================
 // STATUS PROFILE LOADER
 // ========================================
@@ -2349,7 +2623,7 @@ function contentGet(key, fallback = '') {
 
 function contentLines(prefix, fallbackLines = []) {
     const lines = [];
-    for (let i = 1; i <= 50; i++) {
+    for (let i = 1; i <= 120; i++) {
         const key = normalizeStatusKey(`${prefix}.line${i}`);
         if (Object.prototype.hasOwnProperty.call(terminalContent.values, key)) {
             lines.push(terminalContent.values[key]);
@@ -3496,7 +3770,17 @@ function restartTerminalAfterStatusLoad() {
 // ========================================
 function handleFileSelect(e) {
     const file = e.target.files[0];
-    if (!file) return;
+    if (!file) {
+        pendingLocalDatabaseItem = null;
+        return;
+    }
+
+    if (databaseCapacityFull()) {
+        pendingLocalDatabaseItem = null;
+        printDatabaseSlotsFull();
+        e.target.value = '';
+        return;
+    }
     
     const fileName = file.name.toLowerCase();
     if (fileName.endsWith('.md') || fileName.endsWith('.markdown') || fileName.endsWith('.txt')) {
@@ -3529,19 +3813,10 @@ function loadPlainDatabaseFile(file) {
                 return;
             }
 
-            parseDataFile(content);
-            databaseLoaded = databaseEntries.length > 0;
-            databaseSource = file.name;
-            if (!databaseLoaded) throw new Error('No entries found');
-
-            AudioEngine.dataLoaded();
-            print('');
-            print('DATABASE LOADED', 't-cyan');
-            print(`Database: ${file.name}`, 't-amber');
-            print(`Entries loaded: ${databaseEntries.length}`, 't-cyan');
-            print('');
-            print('Use SEARCH or CATEGORIES to explore.', 't-dim');
-            print('');
+            const legacyDatabase = parseLegacyDatabase(content, file.name);
+            if (!legacyDatabase.entries.length) throw new Error('No entries found');
+            mountParsedDatabase(legacyDatabase, pendingLocalDatabaseItem || { file: file.name, displayName: file.name }, file.name);
+            pendingLocalDatabaseItem = null;
         } catch (error) {
             pendingLocalDatabaseItem = null;
             AudioEngine.errorBuzz();
@@ -3735,6 +4010,10 @@ function renderDatabaseSelectorList(body, manifest) {
     externalDescription.textContent = 'Open local file picker for .md, .txt, or encrypted .dat database packages.';
     external.append(externalName, externalDescription);
     external.addEventListener('click', () => {
+        if (databaseCapacityFull()) {
+            renderDatabaseSlotsFullPrompt(body);
+            return;
+        }
         pendingLocalDatabaseItem = { file: 'external database', displayName: 'External Database' };
         document.getElementById('fileInput').click();
     });
@@ -3743,6 +4022,10 @@ function renderDatabaseSelectorList(body, manifest) {
 
 async function showDatabaseSelector() {
     const { body } = createDatabaseModal('LOAD DATABASE');
+    if (databaseCapacityFull()) {
+        renderDatabaseSlotsFullPrompt(body);
+        return;
+    }
     body.textContent = 'Reading database manifest...';
 
     const manifest = await loadDatabaseManifest();
@@ -3753,6 +4036,10 @@ async function prepareManifestDatabase(item) {
     const modal = getById('databaseModal');
     const body = getById('databaseModalBody');
     if (!modal || !body) return;
+    if (databaseCapacityFull()) {
+        renderDatabaseSlotsFullPrompt(body);
+        return;
+    }
     body.textContent = 'Fetching database package...';
     try {
         const path = `databases/${item.file || item.filename}`;
@@ -3768,8 +4055,47 @@ async function prepareManifestDatabase(item) {
 
 function promptForParsedDatabase(parsed, item = {}, path = '') {
     ensureDatabaseModal('LOAD DATABASE');
+    if (databaseCapacityFull()) {
+        renderDatabaseSlotsFullPrompt(getById('databaseModalBody'));
+        return;
+    }
     activeDatabaseSelection = { item, parsed, path };
     renderDatabasePasswordPrompt(parsed);
+}
+
+function renderDatabaseSlotsFullPrompt(body) {
+    if (!body) return;
+    body.textContent = '';
+    const message = document.createElement('p');
+    message.className = 'database-modal-copy t-red';
+    message.textContent = 'DATABASE SLOT CAPACITY REACHED. Eject one database package before loading another.';
+    const details = document.createElement('pre');
+    details.className = 'database-slot-details';
+    details.textContent = databaseSlots.map(slot => (
+        `SLOT ${slot.index + 1}: ${slot.loaded ? databaseSlotDisplayName(slot) : 'EMPTY'}`
+    )).join('\n');
+    const actions = document.createElement('div');
+    actions.className = 'database-modal-actions';
+    const abort = document.createElement('button');
+    abort.className = 'database-modal-action secondary';
+    abort.type = 'button';
+    abort.textContent = 'ABORT';
+    abort.addEventListener('click', closeDatabaseModal);
+    actions.appendChild(abort);
+    databaseSlots.forEach(slot => {
+        const eject = document.createElement('button');
+        eject.className = 'database-modal-action';
+        eject.type = 'button';
+        eject.textContent = `EJECT SLOT ${slot.index + 1}`;
+        eject.disabled = !slot.loaded;
+        eject.addEventListener('click', () => {
+            ejectDatabaseSlot(slot.index);
+            closeDatabaseModal();
+        });
+        actions.appendChild(eject);
+    });
+    body.append(message, details, actions);
+    abort.focus();
 }
 
 function renderLocalDatabasePrompt(item = {}) {
@@ -4021,25 +4347,7 @@ function parseMarkdownDatabase(content, source = 'Markdown database') {
 }
 
 function loadParsedDatabase(parsed) {
-    database = {};
-    databaseEntries = parsed.entries.slice();
-    parsed.entries.forEach(entry => {
-        const key = entry.title.toLowerCase();
-        database[key] = entry;
-        if (entry.id) database[entry.id.toLowerCase()] = entry;
-    });
-    databaseLoaded = true;
-    databaseSource = parsed.metadata.title || parsed.source || 'MARKDOWN DATABASE';
-    updateEntryCount();
-    AudioEngine.dataLoaded();
-    clearOutput();
-    print('');
-    print('DATABASE AUTHENTICATED', 't-cyan');
-    print(`Database: ${databaseSource}`, 't-amber');
-    print(`Entries loaded: ${parsed.entries.length}`, 't-cyan');
-    print('');
-    print('Use SEARCH, CATEGORIES, or admin LIST ALL to explore.', 't-dim');
-    print('');
+    return mountParsedDatabase(parsed, activeDatabaseSelection?.item || {}, activeDatabaseSelection?.path || parsed.source || '');
 }
 
 function loadStatusProfileFile(file) {
@@ -4101,17 +4409,9 @@ function loadEncryptedFile(file) {
             if (markdownDatabase.entries.length) {
                 promptForParsedDatabase(markdownDatabase, { file: file.name, displayName: file.name }, file.name);
             } else if (decrypted.includes(':') && decrypted.includes('|')) {
-                parseDataFile(decrypted);
-                databaseLoaded = true;
-                databaseSource = file.name;
-                AudioEngine.dataLoaded();
-                print('');
-                print('DECRYPTION SUCCESSFUL', 't-cyan');
-                print(`Database: ${file.name}`, 't-amber');
-                print(`Entries loaded: ${databaseEntries.length}`, 't-cyan');
-                print('');
-                print('Use SEARCH or CATEGORIES to explore.', 't-dim');
-                print('');
+                const legacyDatabase = parseLegacyDatabase(decrypted, file.name);
+                if (!legacyDatabase.entries.length) throw new Error('No entries found');
+                mountParsedDatabase(legacyDatabase, { file: file.name, displayName: file.name }, file.name);
             } else {
                 throw new Error('Invalid format');
             }
@@ -4132,9 +4432,8 @@ function loadEncryptedFile(file) {
     reader.readAsText(file);
 }
 
-function parseDataFile(content) {
-    database = {};
-    databaseEntries = [];
+function parseLegacyDatabase(content, source = 'Legacy database') {
+    const entriesOut = [];
     const entries = content.split('\n\n');
     entries.forEach(entry => {
         entry = entry.trim();
@@ -4148,12 +4447,23 @@ function parseDataFile(content) {
                 const title = rest.substring(0, pipeIdx).trim();
                 const entryContent = rest.substring(pipeIdx + 1).trim();
                 const parsedEntry = { id: title.toLowerCase().replace(/\s+/g, '-'), category, title, content: entryContent, clearance: category === 'CONFIDENTIAL' ? '4' : '1' };
-                database[title.toLowerCase()] = parsedEntry;
-                databaseEntries.push(parsedEntry);
+                parsedEntry.confidential = entryRequiresAdmin(parsedEntry);
+                entriesOut.push(parsedEntry);
             }
         }
     });
-    updateEntryCount();
+    return {
+        source,
+        metadata: {
+            title: source,
+            id: source.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+        },
+        entries: entriesOut
+    };
+}
+
+function parseDataFile(content) {
+    return mountParsedDatabase(parseLegacyDatabase(content, 'Legacy database'));
 }
 
 function updateEntryCount() {
@@ -4164,7 +4474,8 @@ function updateEntryCount() {
         seen.add(entry.title);
         return !entryRequiresAdmin(entry);
     }).length;
-    document.getElementById('entryCount').textContent = count;
+    const counter = document.getElementById('entryCount');
+    if (counter) counter.textContent = count;
 }
 
 // ========================================
