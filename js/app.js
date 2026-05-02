@@ -3723,6 +3723,22 @@ function renderDatabaseSelectorList(body, manifest) {
         list.appendChild(button);
     });
     body.appendChild(list);
+
+    const external = document.createElement('button');
+    external.className = 'database-choice database-choice-external';
+    external.type = 'button';
+    const externalName = document.createElement('span');
+    externalName.className = 'database-choice-name';
+    externalName.textContent = 'ADD EXTERNAL DATABASE FILE';
+    const externalDescription = document.createElement('span');
+    externalDescription.className = 'database-choice-description';
+    externalDescription.textContent = 'Open local file picker for .md, .txt, or encrypted .dat database packages.';
+    external.append(externalName, externalDescription);
+    external.addEventListener('click', () => {
+        pendingLocalDatabaseItem = { file: 'external database', displayName: 'External Database' };
+        document.getElementById('fileInput').click();
+    });
+    body.appendChild(external);
 }
 
 async function showDatabaseSelector() {
@@ -3872,10 +3888,8 @@ function runDatabaseDecryptionAnimation(parsed, passwordMatches) {
             const blockA = asciiSweep(frame, 26);
             const blockB = asciiGraph(frame, 30);
             const keyNoise = Array.from({ length: 22 }, (_, index) => ((frame + index * 7) % 16).toString(16).toUpperCase()).join('');
-            const source = activeDatabaseSelection?.path || parsed.source || 'DATABASE PACKAGE';
             box.textContent = [
                 '> ARES PACKAGE CRYPTOGRAPHIC HANDSHAKE',
-                `  SOURCE      : ${source}`,
                 `  HEADER      : ${parsed.metadata.id || 'UNKNOWN'} / ${parsed.entries.length} ENTRIES`,
                 `  KEY STREAM  : ${keyNoise}`,
                 `  XOR PASS    : ${blockA}`,

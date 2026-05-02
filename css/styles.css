@@ -717,6 +717,18 @@ body.low-power .glow {
     background-color: rgba(0, 30, 20, 0.72);
 }
 
+.database-choice-external {
+    margin-top: 10px;
+    border-color: rgba(255, 176, 0, 0.48);
+    background:
+        linear-gradient(90deg, rgba(255, 176, 0, 0.1), transparent),
+        rgba(20, 12, 0, 0.66);
+}
+
+.database-choice-external .database-choice-name {
+    color: var(--amber);
+}
+
 .database-choice-name,
 .database-choice-description {
     display: block;
