@@ -584,6 +584,7 @@ let databaseManifest = null;
 let databaseManifestSource = 'unloaded';
 let activeDatabaseSelection = null;
 let pendingLocalDatabaseItem = null;
+let databaseDecryptFrame = null;
 let terminalContent = {
     source: 'HARDCODED FALLBACK',
     loaded: false,
@@ -1368,6 +1369,24 @@ function handleGlobalKeydown(e) {
         if (e.key === 'Escape') {
             e.preventDefault();
             closeDiagnosticDashboard();
+        }
+        return;
+    }
+
+    const databaseModal = document.getElementById('databaseModal');
+    if (databaseModal) {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            closeDatabaseModal();
+            return;
+        }
+        if (e.key === 'Enter') {
+            const authButton = databaseModal.querySelector('[data-authenticate-database="true"]');
+            if (authButton && !authButton.disabled) {
+                e.preventDefault();
+                authButton.click();
+            }
+            return;
         }
         return;
     }
@@ -3614,10 +3633,18 @@ async function loadDatabaseManifest() {
 }
 
 function closeDatabaseModal() {
+    clearDatabaseDecryptAnimation();
     const modal = getById('databaseModal');
     if (modal) modal.remove();
     activeDatabaseSelection = null;
     pendingLocalDatabaseItem = null;
+}
+
+function clearDatabaseDecryptAnimation() {
+    if (databaseDecryptFrame) {
+        cancelAnimationFrame(databaseDecryptFrame);
+        databaseDecryptFrame = null;
+    }
 }
 
 function createDatabaseModal(titleText) {
@@ -3669,7 +3696,7 @@ function renderDatabaseSelectorList(body, manifest) {
     body.textContent = '';
     const intro = document.createElement('p');
     intro.className = 'database-modal-copy';
-    intro.textContent = 'Select a database package. Password authentication is roleplay clearance only.';
+    intro.textContent = 'Select a database package.';
     body.appendChild(intro);
 
     if (databaseManifestSource === 'fallback') {
@@ -3755,7 +3782,8 @@ function renderLocalDatabasePrompt(item = {}) {
     body.append(message, actions);
 }
 
-function renderDatabasePasswordPrompt(parsed) {
+function renderDatabasePasswordPrompt(parsed, previousError = '') {
+    clearDatabaseDecryptAnimation();
     const body = getById('databaseModalBody');
     if (!body) return;
     body.textContent = '';
@@ -3772,12 +3800,14 @@ function renderDatabasePasswordPrompt(parsed) {
     input.setAttribute('aria-label', 'Database password');
     const error = document.createElement('div');
     error.className = 'database-password-error';
+    error.textContent = previousError;
     const actions = document.createElement('div');
     actions.className = 'database-modal-actions';
     const submit = document.createElement('button');
     submit.className = 'database-modal-action';
     submit.type = 'button';
     submit.textContent = 'AUTHENTICATE';
+    submit.dataset.authenticateDatabase = 'true';
     const back = document.createElement('button');
     back.className = 'database-modal-action secondary';
     back.type = 'button';
@@ -3785,25 +3815,92 @@ function renderDatabasePasswordPrompt(parsed) {
     actions.append(submit, back);
     body.append(title, description, input, error, actions);
 
+    let authenticationRunning = false;
     const authenticate = () => {
+        if (authenticationRunning) return;
+        authenticationRunning = true;
+        const submittedPassword = input.value.trim();
         const expected = String(parsed.metadata.password || '').trim();
-        if (input.value.trim() === expected) {
-            loadParsedDatabase(parsed);
-            closeDatabaseModal();
-        } else {
-            error.textContent = contentGet('errors.database_password_fail', 'ACCESS DENIED - INVALID DATABASE PASSWORD');
-            input.value = '';
-            input.focus();
-            AudioEngine.errorBuzz();
-        }
+        runDatabaseDecryptionAnimation(parsed, submittedPassword === expected);
     };
     submit.addEventListener('click', authenticate);
     input.addEventListener('keydown', event => {
-        if (event.key === 'Enter') authenticate();
-        if (event.key === 'Escape') closeDatabaseModal();
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            event.stopPropagation();
+            authenticate();
+        }
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+            closeDatabaseModal();
+        }
     });
     back.addEventListener('click', showDatabaseSelector);
     input.focus();
+}
+
+function runDatabaseDecryptionAnimation(parsed, passwordMatches) {
+    clearDatabaseDecryptAnimation();
+    const body = getById('databaseModalBody');
+    if (!body) return;
+
+    body.textContent = '';
+    const title = document.createElement('p');
+    title.className = 'database-modal-copy t-amber';
+    title.textContent = `Decrypting: ${parsed.metadata.title || parsed.source}`;
+    const box = document.createElement('pre');
+    box.className = 'database-decrypt-box';
+    box.setAttribute('aria-live', 'polite');
+    const hint = document.createElement('p');
+    hint.className = 'database-modal-copy t-dim';
+    hint.textContent = 'Running package decryption. Stand by...';
+    body.append(title, box, hint);
+
+    AudioEngine.decryptSound();
+    const startedAt = performance.now();
+    const duration = 5000;
+    let lastRender = 0;
+
+    function render(now) {
+        const elapsed = now - startedAt;
+        const progress = Math.min(100, Math.round((elapsed / duration) * 100));
+        const frame = Math.floor(elapsed / 120);
+
+        if (now - lastRender > 90 || progress >= 100) {
+            lastRender = now;
+            const blockA = asciiSweep(frame, 26);
+            const blockB = asciiGraph(frame, 30);
+            const keyNoise = Array.from({ length: 22 }, (_, index) => ((frame + index * 7) % 16).toString(16).toUpperCase()).join('');
+            const source = activeDatabaseSelection?.path || parsed.source || 'DATABASE PACKAGE';
+            box.textContent = [
+                '> ARES PACKAGE CRYPTOGRAPHIC HANDSHAKE',
+                `  SOURCE      : ${source}`,
+                `  HEADER      : ${parsed.metadata.id || 'UNKNOWN'} / ${parsed.entries.length} ENTRIES`,
+                `  KEY STREAM  : ${keyNoise}`,
+                `  XOR PASS    : ${blockA}`,
+                `  INDEX MAP   : ${blockB}`,
+                `  DECRYPTION  : ${asciiBar(progress, 28)}`,
+                progress >= 100 ? '  STATUS      : FINALIZING...' : `  STATUS      : RUNNING ${spinner(frame)}`
+            ].join('\n');
+        }
+
+        if (elapsed < duration) {
+            databaseDecryptFrame = requestAnimationFrame(render);
+            return;
+        }
+
+        databaseDecryptFrame = null;
+        if (passwordMatches) {
+            loadParsedDatabase(parsed);
+            closeDatabaseModal();
+        } else {
+            AudioEngine.errorBuzz();
+            renderDatabasePasswordPrompt(parsed, contentGet('errors.database_password_fail', 'ACCESS DENIED - INVALID DATABASE PASSWORD'));
+        }
+    }
+
+    databaseDecryptFrame = requestAnimationFrame(render);
 }
 
 function parseSimpleMetadata(lines) {

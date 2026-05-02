@@ -751,6 +751,22 @@ body.low-power .glow {
     margin-bottom: 10px;
 }
 
+.database-decrypt-box {
+    border: 1px solid rgba(32, 194, 14, 0.35);
+    background:
+        linear-gradient(90deg, rgba(32, 194, 14, 0.08), transparent 38%),
+        rgba(0, 14, 4, 0.78);
+    color: var(--phosphor);
+    font-family: var(--terminal-font);
+    font-size: var(--font-size-small);
+    line-height: 1.45;
+    min-height: 186px;
+    margin-bottom: 12px;
+    padding: 12px;
+    white-space: pre-wrap;
+    overflow: hidden;
+}
+
 .database-modal-actions {
     display: flex;
     flex-wrap: wrap;
