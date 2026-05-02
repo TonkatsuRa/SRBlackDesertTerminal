@@ -3593,7 +3593,7 @@ function handleStatusFileSelect(e) {
 
 async function fetchTextFile(path) {
     const response = await fetch(path, { cache: 'no-store' });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (!response.ok) throw new Error(`${path} HTTP ${response.status}`);
     return response.text();
 }
 
@@ -3735,7 +3735,7 @@ function renderLocalDatabasePrompt(item = {}) {
     const fileName = item.file || item.filename || 'database.md';
     const message = document.createElement('p');
     message.className = 'database-modal-copy t-amber';
-    message.textContent = `${contentGet('errors.database_package_fail', 'DATABASE PACKAGE FAILED TO LOAD.')} The browser could not fetch databases/${fileName}. If you opened the page directly from disk, select that file manually from the databases folder.`;
+        message.textContent = `${contentGet('errors.database_package_fail', 'DATABASE PACKAGE FAILED TO LOAD.')} The browser could not fetch databases/${fileName}. On GitHub Pages, make sure the root .nojekyll file is uploaded so Markdown databases are served as raw files. If you opened the page directly from disk, select that file manually from the databases folder.`;
     const select = document.createElement('button');
     select.className = 'database-modal-action';
     select.type = 'button';
