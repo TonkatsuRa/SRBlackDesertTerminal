@@ -1260,7 +1260,7 @@ function bootStatusClass(status) {
 // TERMINAL INIT
 // ========================================
 function initTerminal() {
-    showHelp();
+    showWelcome();
     updateMenuSelection();
     const startHologram = () => initHologram();
     if (window.requestIdleCallback && !prefersReducedMotion) {
@@ -1872,6 +1872,28 @@ function processCommand(input) {
         print('Use the menu to navigate commands.', 't-dim');
         print('');
     }
+}
+
+function showWelcome() {
+    clearOutput();
+    print('═══════════════════════════════════════════════════════', 't-dim');
+    print('              ARES MACROTECHNOLOGY', 't-bright');
+    print('═══════════════════════════════════════════════════════', 't-dim');
+    print('');
+    print('WELCOME, AUTHORIZED PERSONNEL ASSET.', 't-cyan');
+    print('');
+    print('This terminal provides controlled access to Black Desert');
+    print('Research Facility database, diagnostic, and status systems.');
+    print('');
+    print('All employees are reminded that compliance is productivity.');
+    print('Productivity is margin. Margin is shareholder confidence.', 't-amber');
+    print('');
+    print('Obey issued directives, fulfill assigned duties, and report');
+    print('facility anomalies before they become expensive.');
+    print('');
+    print('Ares values dedication, discretion, and replaceable efficiency.', 't-red');
+    print('Use HELP for command guidance.', 't-dim');
+    print('═══════════════════════════════════════════════════════', 't-dim');
 }
 
 function showHelp() {
