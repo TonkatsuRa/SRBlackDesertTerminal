@@ -2273,7 +2273,65 @@ function databaseSlotDisplayName(slot) {
     return slot.source || slot.file || slot.metadata?.title || `DATABASE SLOT ${slot.index + 1}`;
 }
 
+function normalizeDatabaseIdentity(value) {
+    return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/^databases[\\/]/, '')
+        .replace(/\\/g, '/');
+}
+
+function databaseItemIdentities(item = {}) {
+    return [
+        item.id,
+        item.file,
+        item.filename,
+        item.displayName,
+        item.name
+    ].map(normalizeDatabaseIdentity).filter(Boolean);
+}
+
+function parsedDatabaseIdentities(parsed = {}, item = {}, path = '') {
+    return [
+        parsed.metadata?.id,
+        parsed.metadata?.title,
+        parsed.source,
+        item.id,
+        item.file,
+        item.filename,
+        item.displayName,
+        item.name,
+        path
+    ].map(normalizeDatabaseIdentity).filter(Boolean);
+}
+
+function databaseAlreadyMountedByIdentities(identities = []) {
+    const lookup = new Set(identities.map(normalizeDatabaseIdentity).filter(Boolean));
+    if (!lookup.size) return false;
+    return databaseSlots.some(slot => {
+        if (!slot.loaded) return false;
+        return [slot.metadata?.id, slot.metadata?.title, slot.source, slot.file]
+            .map(normalizeDatabaseIdentity)
+            .some(identity => identity && lookup.has(identity));
+    });
+}
+
+function databaseItemAlreadyMounted(item = {}) {
+    return databaseAlreadyMountedByIdentities(databaseItemIdentities(item));
+}
+
 function mountParsedDatabase(parsed, item = {}, path = '') {
+    if (databaseAlreadyMountedByIdentities(parsedDatabaseIdentities(parsed, item, path))) {
+        AudioEngine.errorBuzz();
+        clearOutput();
+        print('');
+        print('DATABASE ALREADY MOUNTED', 't-amber');
+        print(`${parsed.metadata.title || item.displayName || parsed.source || item.file || 'Selected package'} is already loaded in a database slot.`, 't-dim');
+        print('Eject that database before loading it again.', 't-dim');
+        print('');
+        return false;
+    }
+
     const slotIndex = firstEmptyDatabaseSlotIndex();
     if (slotIndex < 0) {
         printDatabaseSlotsFull();
@@ -3984,17 +4042,22 @@ function renderDatabaseSelectorList(body, manifest) {
     const list = document.createElement('div');
     list.className = 'database-list';
     manifest.forEach(item => {
+        const alreadyMounted = databaseItemAlreadyMounted(item);
         const button = document.createElement('button');
-        button.className = 'database-choice';
+        button.className = `database-choice ${alreadyMounted ? 'disabled mounted' : ''}`.trim();
         button.type = 'button';
+        button.disabled = alreadyMounted;
+        if (alreadyMounted) button.setAttribute('aria-disabled', 'true');
         const name = document.createElement('span');
         name.className = 'database-choice-name';
         name.textContent = item.displayName || item.name || item.file;
         const description = document.createElement('span');
         description.className = 'database-choice-description';
-        description.textContent = item.description || item.file;
+        description.textContent = alreadyMounted
+            ? 'DATABASE ALREADY LOADED - eject its slot to load it again.'
+            : (item.description || item.file);
         button.append(name, description);
-        button.addEventListener('click', () => prepareManifestDatabase(item));
+        if (!alreadyMounted) button.addEventListener('click', () => prepareManifestDatabase(item));
         list.appendChild(button);
     });
     body.appendChild(list);
@@ -4036,6 +4099,10 @@ async function prepareManifestDatabase(item) {
     const modal = getById('databaseModal');
     const body = getById('databaseModalBody');
     if (!modal || !body) return;
+    if (databaseItemAlreadyMounted(item)) {
+        renderDatabaseAlreadyMountedPrompt(body, item);
+        return;
+    }
     if (databaseCapacityFull()) {
         renderDatabaseSlotsFullPrompt(body);
         return;
@@ -4055,12 +4122,32 @@ async function prepareManifestDatabase(item) {
 
 function promptForParsedDatabase(parsed, item = {}, path = '') {
     ensureDatabaseModal('LOAD DATABASE');
+    if (databaseAlreadyMountedByIdentities(parsedDatabaseIdentities(parsed, item, path))) {
+        renderDatabaseAlreadyMountedPrompt(getById('databaseModalBody'), item, parsed);
+        return;
+    }
     if (databaseCapacityFull()) {
         renderDatabaseSlotsFullPrompt(getById('databaseModalBody'));
         return;
     }
     activeDatabaseSelection = { item, parsed, path };
     renderDatabasePasswordPrompt(parsed);
+}
+
+function renderDatabaseAlreadyMountedPrompt(body, item = {}, parsed = {}) {
+    if (!body) return;
+    body.textContent = '';
+    const name = parsed.metadata?.title || item.displayName || item.name || item.file || 'Selected database';
+    const message = document.createElement('p');
+    message.className = 'database-modal-copy t-amber';
+    message.textContent = `${name} is already mounted. Eject that database slot before loading it again.`;
+    const back = document.createElement('button');
+    back.className = 'database-modal-action secondary';
+    back.type = 'button';
+    back.textContent = 'BACK TO DATABASE LIST';
+    back.addEventListener('click', showDatabaseSelector);
+    body.append(message, back);
+    back.focus();
 }
 
 function renderDatabaseSlotsFullPrompt(body) {
