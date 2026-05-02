@@ -2966,7 +2966,14 @@ function getBootLogoMarkup(fallbackMarkup) {
     const lines = contentLines('boot.logo', []);
     if (!lines.length) return fallbackMarkup;
     return lines
-        .map(line => `<span style="color:#ffb000">${escapeHtml(line)}</span>`)
+        .map((line, index) => {
+            const className = contentClass('boot.logo', index, '')
+                .split(/\s+/)
+                .filter(name => /^t-[a-z]+$/i.test(name))
+                .join(' ');
+            const classAttr = className ? ` class="${escapeHtml(className)}"` : '';
+            return `<span${classAttr}>${escapeHtml(line)}</span>`;
+        })
         .join('\n');
 }
 
