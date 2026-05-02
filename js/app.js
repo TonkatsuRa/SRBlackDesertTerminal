@@ -232,8 +232,8 @@ const AudioEngine = {
     },
 
     updateSoundStatus() {
-        const label = document.getElementById('soundStatus');
-        const dot = document.getElementById('soundDot');
+        const label = getById('soundStatus');
+        const dot = getById('soundDot');
         if (label) label.textContent = this.enabled ? 'ON' : 'OFF';
         if (dot) dot.classList.toggle('err', !this.enabled);
     },
@@ -574,12 +574,51 @@ let facilityFrame = 0;
 let facilityAnimFrame = null;
 let facilityLastRender = 0;
 const facilityCanvasSize = { width: 0, height: 0, ratio: 1 };
+let facilityZoneCache = null;
+let facilityLinkCache = null;
+let facilityContactCache = null;
 let statusProfile = {
     source: 'INTERNAL DEFAULT',
     loaded: false,
     values: {}
 };
 const STATUS_PROFILE_STORAGE_KEY = 'aresStatusProfile.v1';
+const domByIdCache = new Map();
+let statusProfileKeyCache = null;
+const statusSectionIdCache = new Map();
+const statusLineGroupCache = new Map();
+
+function getById(id) {
+    const cached = domByIdCache.get(id);
+    if (cached && cached.isConnected) return cached;
+
+    const element = document.getElementById(id);
+    if (element) {
+        domByIdCache.set(id, element);
+    } else {
+        domByIdCache.delete(id);
+    }
+    return element;
+}
+
+function clearElement(element) {
+    if (element) element.textContent = '';
+}
+
+function invalidateStatusCaches() {
+    statusProfileKeyCache = null;
+    statusSectionIdCache.clear();
+    statusLineGroupCache.clear();
+    facilityZoneCache = null;
+    facilityLinkCache = null;
+    facilityContactCache = null;
+}
+
+function setStatusProfile(profile) {
+    statusProfile = profile;
+    invalidateStatusCaches();
+}
+
 const DEFAULT_BOOT_SEQUENCE = [
     { type: 'line', text: '╔════════════════════════════════════════════╗', className: 't-dim' },
     { type: 'line', text: '║    ARES MACROTECHNOLOGY SYSTEMS v4.7.2     ║', className: 't-dim' },
@@ -694,9 +733,10 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function calculateLinesPerPage() {
-    const viewport = document.getElementById('contentViewport');
+    const viewport = getById('contentViewport');
     if (viewport) {
-        const content = document.querySelector('.content-area');
+        const content = getById('contentArea');
+        if (!content) return;
         const fontSize = parseFloat(getComputedStyle(content).fontSize);
         const lineHeight = fontSize * 1.22;
         const padding = 20; // top + bottom padding
@@ -1072,7 +1112,7 @@ function bootStatusClass(status) {
             await sleep(340, false);
         }
 
-        bootOutput.innerHTML = '';
+        clearElement(bootOutput);
         bootOutput.classList.remove('fading');
         bootOutput.style.opacity = '';
         bootOutput.style.transform = '';
@@ -1108,11 +1148,11 @@ function bootStatusClass(status) {
     bootScreen.classList.remove('hidden', 'boot-fading', 'boot-blackout');
     bootScreen.classList.add('boot-log-mode');
     bootScreen.dataset.exitDuration = '0.24';
-    bootOutput.innerHTML = '';
+    clearElement(bootOutput);
     bootOutput.classList.remove('fading');
     bootOutput.style.opacity = '';
     bootOutput.style.transform = '';
-    bootLogo.innerHTML = '';
+    clearElement(bootLogo);
     bootLogo.classList.remove('visible');
     const bootLeft = document.querySelector('.boot-left');
     if (bootLeft) {
@@ -1445,12 +1485,13 @@ function clearOutput() {
     isTyping = false;
     typewriterRunId++;
     updatePageIndicator();
-    document.getElementById('output').innerHTML = '';
+    clearElement(getById('output'));
 }
 
 function updatePageIndicator() {
-    const indicator = document.getElementById('pageIndicator');
-    const hint = document.getElementById('navHint');
+    const indicator = getById('pageIndicator');
+    const hint = getById('navHint');
+    if (!indicator || !hint) return;
     if (totalPages > 1) {
         indicator.textContent = `PAGE ${currentPage + 1}/${totalPages}`;
         hint.classList.add('visible');
@@ -1465,8 +1506,9 @@ function renderCurrentPage() {
         cancelAnimationFrame(typewriterFrame);
         typewriterFrame = null;
     }
-    const output = document.getElementById('output');
-    output.innerHTML = '';
+    const output = getById('output');
+    clearElement(output);
+    if (!output) return;
     
     const start = currentPage * linesPerPage;
     const end = Math.min(start + linesPerPage, outputBuffer.length);
@@ -1497,7 +1539,8 @@ function processTypewriterQueue(runId = typewriterRunId) {
     
     isTyping = true;
     const line = typewriterQueue.shift();
-    const output = document.getElementById('output');
+    const output = getById('output');
+    if (!output) return;
     const div = document.createElement('div');
     div.className = `output-line ${line.className}`.trim();
     output.appendChild(div);
@@ -1610,8 +1653,9 @@ function renderCurrentPageInstant() {
         cancelAnimationFrame(typewriterFrame);
         typewriterFrame = null;
     }
-    const output = document.getElementById('output');
-    output.innerHTML = '';
+    const output = getById('output');
+    clearElement(output);
+    if (!output) return;
     
     const start = currentPage * linesPerPage;
     const end = Math.min(start + linesPerPage, outputBuffer.length);
@@ -2041,7 +2085,7 @@ function loadStoredStatusProfile() {
         const stored = JSON.parse(localStorage.getItem(STATUS_PROFILE_STORAGE_KEY) || 'null');
         if (!stored || !stored.content) return;
         const profile = parseStatusProfile(stored.content, stored.source || 'STORED STATUS PROFILE');
-        if (profile.loaded) statusProfile = profile;
+        if (profile.loaded) setStatusProfile(profile);
     } catch (error) {
         try { localStorage.removeItem(STATUS_PROFILE_STORAGE_KEY); } catch (storageError) {}
     }
@@ -2088,13 +2132,19 @@ function statusState(key, fallback = 'ok') {
 
 function statusSectionIds(prefix) {
     const prefixKey = `${normalizeStatusKey(prefix)}.`;
+    const cached = statusSectionIdCache.get(prefixKey);
+    if (cached) return cached.slice();
+
     const ids = new Set();
-    Object.keys(statusProfile.values).forEach(key => {
+    if (!statusProfileKeyCache) statusProfileKeyCache = Object.keys(statusProfile.values);
+    statusProfileKeyCache.forEach(key => {
         if (!key.startsWith(prefixKey)) return;
         const id = key.slice(prefixKey.length).split('.')[0];
         if (id) ids.add(id);
     });
-    return Array.from(ids);
+    const result = Array.from(ids);
+    statusSectionIdCache.set(prefixKey, result);
+    return result.slice();
 }
 
 function sortStatusIds(a, b) {
@@ -2145,6 +2195,10 @@ function getBootSequence() {
 }
 
 function statusLineGroup(prefix) {
+    const cacheKey = normalizeStatusKey(prefix);
+    const cached = statusLineGroupCache.get(cacheKey);
+    if (cached) return cached.slice();
+
     const lines = [];
     for (let i = 1; i <= 12; i++) {
         const value = statusGet(`${prefix}.line${i}`, null);
@@ -2160,7 +2214,9 @@ function statusLineGroup(prefix) {
                 .forEach(line => lines.push(line));
         }
     }
-    return lines;
+
+    statusLineGroupCache.set(cacheKey, lines);
+    return lines.slice();
 }
 
 function statusInterpolate(text, frame) {
@@ -2223,11 +2279,11 @@ function handleVisibilityChange() {
 }
 
 function clearStatusProfile() {
-    statusProfile = {
+    setStatusProfile({
         source: 'INTERNAL DEFAULT',
         loaded: false,
         values: {}
-    };
+    });
     clearStoredStatusProfile();
     AudioEngine.pageFlip();
     refreshStatusPanels();
@@ -2285,12 +2341,12 @@ function showStatusFormatHelp() {
 // DIAGNOSTIC DASHBOARD
 // ========================================
 function diagText(id, value) {
-    const element = document.getElementById(id);
+    const element = getById(id);
     if (element && element.textContent !== value) element.textContent = value;
 }
 
 function diagCardState(id, state = 'ok') {
-    const card = document.getElementById(id);
+    const card = getById(id);
     if (!card) return;
     card.classList.toggle('warn', state === 'warn');
     card.classList.toggle('alert', state === 'alert');
@@ -2555,6 +2611,8 @@ const FACILITY_CONTACTS = [
 ];
 
 function getFacilityZones() {
+    if (facilityZoneCache) return facilityZoneCache;
+
     const defaultIds = new Set(FACILITY_ZONES.map(zone => zone.id));
     const zones = FACILITY_ZONES
         .filter(zone => statusBool(`facility.zone.${zone.id}.enabled`, true))
@@ -2591,10 +2649,13 @@ function getFacilityZones() {
             });
         });
 
-    return zones;
+    facilityZoneCache = zones;
+    return facilityZoneCache;
 }
 
 function getFacilityLinks() {
+    if (facilityLinkCache) return facilityLinkCache;
+
     const defaultIds = new Set(FACILITY_LINKS.map(link => `${link.from}_${link.to}`));
     const links = FACILITY_LINKS
         .filter(link => statusBool(`facility.link.${link.from}_${link.to}.enabled`, true))
@@ -2624,10 +2685,13 @@ function getFacilityLinks() {
             });
         });
 
-    return links;
+    facilityLinkCache = links;
+    return facilityLinkCache;
 }
 
 function getFacilityContacts() {
+    if (facilityContactCache) return facilityContactCache;
+
     const routeText = statusGet('facility.contacts.routes', '');
     const parsedRoutes = routeText
         ? routeText.split(',').map((route, index) => {
@@ -2642,7 +2706,10 @@ function getFacilityContacts() {
         : [];
     const routes = parsedRoutes.length ? parsedRoutes : FACILITY_CONTACTS;
     const count = Math.round(statusNumber('facility.contacts.unknown', routes.length, 0, 8));
-    if (count <= 0) return [];
+    if (count <= 0) {
+        facilityContactCache = [];
+        return facilityContactCache;
+    }
 
     const contacts = [];
     for (let i = 0; i < count; i++) {
@@ -2652,7 +2719,8 @@ function getFacilityContacts() {
             phase: (route.phase + i * 0.19) % 1
         });
     }
-    return contacts;
+    facilityContactCache = contacts;
+    return facilityContactCache;
 }
 
 function facilityZoneReadoutLine(zone) {
@@ -2890,7 +2958,7 @@ function updateFacilityReadouts(frame) {
 }
 
 function renderFacilityStatus(timestamp = 0) {
-    const canvas = document.getElementById('facilityCanvas');
+    const canvas = getById('facilityCanvas');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -3192,7 +3260,7 @@ function loadStatusProfileFile(file) {
             const content = encrypted ? decodeStatusPayload(event.target.result) : event.target.result;
             const profile = parseStatusProfile(content, file.name);
             if (!profile.loaded) throw new Error('No profile keys found');
-            statusProfile = profile;
+            setStatusProfile(profile);
             persistStatusProfile(profile, content);
             AudioEngine.dataLoaded();
             forceCloseRuntimeOverlays();
@@ -3365,6 +3433,7 @@ function startMiniGame() {
     const stars = Array.from({length: 100}, () => ({ x: Math.random() * W, y: Math.random() * H, speed: 1 + Math.random() * 3, size: Math.random() * 2 }));
     const keys = {};
     let lastFire = 0;
+    let gameFrame = null;
     
     function handleKeyDown(e) { keys[e.key] = true; if (e.key === ' ' && gameRunning && !gameOver) { e.preventDefault(); fireProjectile(); } if (e.key === 'Escape') closeGame(); }
     function handleKeyUp(e) { keys[e.key] = false; }
@@ -3440,7 +3509,7 @@ function startMiniGame() {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.03)'; for (let i = 0; i < H; i += 2) ctx.fillRect(0, i, W, 1);
     }
     
-    function gameLoop() { if (!document.getElementById('gameOverlay')) return; update(); draw(); if (gameRunning && !gameOver) requestAnimationFrame(gameLoop); }
+    function gameLoop() { if (!document.getElementById('gameOverlay')) return; update(); draw(); if (gameRunning && !gameOver) gameFrame = requestAnimationFrame(gameLoop); }
     
     const timer = setInterval(() => {
         if (!gameRunning || gameOver) { clearInterval(timer); return; }
@@ -3463,6 +3532,11 @@ function startMiniGame() {
     
     window.closeGame = function() {
         gameRunning = false;
+        clearInterval(timer);
+        if (gameFrame) {
+            cancelAnimationFrame(gameFrame);
+            gameFrame = null;
+        }
         document.removeEventListener('keydown', handleKeyDown);
         document.removeEventListener('keyup', handleKeyUp);
         const overlay = document.getElementById('gameOverlay');
