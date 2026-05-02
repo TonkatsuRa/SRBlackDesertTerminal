@@ -62,30 +62,25 @@ soundOff = SOUND OFF
 
 @amber WELCOME, AUTHORIZED PERSONNEL ASSET.
 
-@amber You are accessing the ARES MACROTECHNOLOGY
-@amber BLACK DESERT RESEARCH FACILITY terminal network.
+@amber This system provides controlled access to facility database, diagnostic, logistics, and operational status functions. 
+@amber All activity is monitored for security, compliance, and performance optimization.
 
-This system provides controlled access to facility database, diagnostic, logistics, and operational status functions. All activity is monitored for security, compliance, and performance optimization.
-
-Remember:
-Compliance is productivity.
-Productivity is margin.
-Margin is confidence.
-Confidence is continuity.
-
-Report all anomalies before they escalate into liabilities. Unreported incidents will be interpreted as negligence. Repeated negligence will be interpreted as disloyalty.
+@amber Report all anomalies before they escalate into liabilities. Unreported incidents will be interpreted as negligence and as disloyalty.
 
 @amber Ares values dedication, discretion, and efficient replacement.
-Rest periods are authorized only when they preserve long-term output. Emotional distress should be logged through the appropriate channel and resolved without impact to mission deliverables.
+@amber Rest periods are authorized only when they preserve long-term output. Emotional distress should be logged through the appropriate channel and resolved without impact to mission deliverables.
 
-You are not merely an employee. You are an operational asset entrusted with shareholder confidence.
+@amber Remember:
+@amber Compliance is productivity. Productivity is margin.
+@amber Margin is confidence. Confidence is continuity.
 
 @red In unity, there is efficiency.
 @red In efficiency, there is profit.
 @red In profit, there is purpose.
+@red You are not merely an employee. You are an operational asset entrusted with shareholder confidence.
 
 @bright WELCOME BACK.
-@bright RESUME FUNCTION.
+@bright RESUME YOUR FUNCTION IMMEDIATELY.
 
 @dim Use HELP for command guidance.
 @dim ═══════════════════════════════════════════════════════
