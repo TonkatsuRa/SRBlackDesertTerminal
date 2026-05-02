@@ -66,12 +66,15 @@ This terminal provides controlled access to Black Desert
 Research Facility database, diagnostic, and status systems.
 
 All employees are reminded that compliance is productivity.
+A rested worker is an underutilized resource.
 Productivity is margin. Margin is shareholder confidence.
 
 Obey issued directives, fulfill assigned duties, and report
 facility anomalies before they become expensive.
 
-Ares values dedication, discretion, and replaceable efficiency.
+@red Ares values dedication, discretion, and replaceable efficiency.
+@red You are not just an employee. You are an appreciating asset until replacement.
+@red In unity, there is efficiency. In efficiency, there is profit. In profit, there is purpose.
 
 @dim Use HELP for command guidance.
 @dim ═══════════════════════════════════════════════════════
