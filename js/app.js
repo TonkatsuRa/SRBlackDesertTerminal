@@ -577,9 +577,58 @@ const AudioEngine = {
 // STATE
 // ========================================
 let database = {};
+let databaseEntries = [];
 let databaseLoaded = false;
+let databaseSource = 'NO DATABASE';
+let databaseManifest = null;
+let databaseManifestSource = 'unloaded';
+let activeDatabaseSelection = null;
+let pendingLocalDatabaseItem = null;
+let terminalContent = {
+    source: 'HARDCODED FALLBACK',
+    loaded: false,
+    values: {}
+};
 let adminMode = false;
 const ADMIN_PASSWORD = atob("YXBvY2FseXBzZQ==");
+const FALLBACK_DATABASE_MANIFEST = [
+    {
+        id: 'database1',
+        displayName: 'Personnel Registry',
+        description: 'Employee, contractor, and missing staff notes for Black Desert Research.',
+        file: 'database1.md'
+    },
+    {
+        id: 'database2',
+        displayName: 'Security Incidents',
+        description: 'Patrol reports, alarm events, and defense-grid irregularities.',
+        file: 'database2.md'
+    },
+    {
+        id: 'database3',
+        displayName: 'Research Assets',
+        description: 'Specimen vaults, prototype lockers, and archived lab inventory.',
+        file: 'database3.md'
+    },
+    {
+        id: 'database4',
+        displayName: 'Outpost Relay Logs',
+        description: 'Remote station, drone uplink, and mesh-network records.',
+        file: 'database4.md'
+    },
+    {
+        id: 'database5',
+        displayName: 'Maintenance Queue',
+        description: 'Power, life-support, access, and generator maintenance backlog.',
+        file: 'database5.md'
+    },
+    {
+        id: 'database6',
+        displayName: 'Confidential Archive',
+        description: 'Restricted executive notes, redacted incidents, and sealed directives.',
+        file: 'database6.md'
+    }
+];
 const queueTask = callback => {
     if (window.queueMicrotask) {
         window.queueMicrotask(callback);
@@ -658,6 +707,16 @@ function setStatusProfile(profile) {
     invalidateStatusCaches();
 }
 
+function setTerminalContent(profile) {
+    terminalContent = profile && profile.loaded ? profile : {
+        source: 'HARDCODED FALLBACK',
+        loaded: false,
+        values: {}
+    };
+    invalidateStatusCaches();
+    applyTerminalContentToDom();
+}
+
 const DEFAULT_BOOT_SEQUENCE = [
     { type: 'line', text: '╔════════════════════════════════════════════╗', className: 't-dim' },
     { type: 'line', text: '║    ARES MACROTECHNOLOGY SYSTEMS v4.7.2     ║', className: 't-dim' },
@@ -727,7 +786,9 @@ document.addEventListener('DOMContentLoaded', () => {
     menuItems = document.querySelectorAll('.menu-item');
     calculateLinesPerPage();
     loadStoredStatusProfile();
-    startBootSequence();
+    loadTerminalContent().finally(() => {
+        startBootSequence();
+    });
     
     document.getElementById('fileInput').addEventListener('change', handleFileSelect);
     document.getElementById('statusFileInput').addEventListener('change', handleStatusFileSelect);
@@ -767,7 +828,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.cancelable && !e.target.closest('.boot-left, .menu-list, .dialog-box, .diagnostic-panel, .facility-panel')) e.preventDefault();
     }, { passive: false });
     document.addEventListener('touchmove', e => {
-        if (e.cancelable && !e.target.closest('.boot-left, .menu-list, .dialog-box, .diagnostic-panel, .facility-panel, #gameOverlay, #casinoOverlay')) e.preventDefault();
+        if (e.cancelable && !e.target.closest('.boot-left, .menu-list, .dialog-box, .diagnostic-panel, .facility-panel, #gameOverlay, #casinoOverlay, #liebiOverlay')) e.preventDefault();
     }, { passive: false });
     document.addEventListener('pointerdown', () => AudioEngine.resume(), { once: true });
     document.addEventListener('keydown', () => AudioEngine.resume(), { once: true });
@@ -878,7 +939,7 @@ function startBootSequence() {
     }
     
     // Right side ASCII art (shows after initial diagnostics)
-    const rightSideLogo = `
+    const fallbackRightSideLogo = `
 <span style="color:#ffb000">     █████╗ ██████╗ ███████╗███████╗</span>
 <span style="color:#ffb000">    ██╔══██╗██╔══██╗██╔════╝██╔════╝</span>
 <span style="color:#ffb000">    ███████║██████╔╝█████╗  ███████╗</span>
@@ -912,6 +973,7 @@ function startBootSequence() {
 <span style="color:#ff3333">  ║  All activity monitored and logged.  ║</span>
 <span style="color:#ff3333">  ╚═══════════════════════════════════════╝</span>
 `;
+    const rightSideLogo = getBootLogoMarkup(fallbackRightSideLogo);
     
     const bootSequence = getBootSequence();
 
@@ -1288,6 +1350,10 @@ function initTerminal() {
 }
 
 function handleGlobalKeydown(e) {
+    if (document.getElementById('liebiOverlay') || document.getElementById('gameOverlay') || document.getElementById('casinoOverlay')) {
+        return;
+    }
+
     const facilityOverlay = document.getElementById('facilityOverlay');
     if (facilityOverlay.classList.contains('active')) {
         if (e.key === 'Escape') {
@@ -1427,7 +1493,7 @@ function executeSelectedCommand() {
             showHelp();
             break;
         case 'load':
-            document.getElementById('fileInput').click();
+            showDatabaseSelector();
             break;
         case 'loadStatus':
             document.getElementById('statusFileInput').click();
@@ -1726,7 +1792,16 @@ function printAdminRequired(action) {
     clearOutput();
     print('');
     print(`${action}: ADMIN ACCESS REQUIRED`, 't-red');
-    print('Use ACCESS to authenticate before modifying status systems.', 't-dim');
+    print(contentGet('admin.required_hint', 'Use ACCESS to authenticate before modifying status systems.'), 't-dim');
+    print('');
+}
+
+function printNoDatabaseLoaded() {
+    AudioEngine.errorBuzz();
+    clearOutput();
+    print('');
+    print(contentGet('errors.no_database', 'ERROR: No database loaded.'), 't-red');
+    print(contentGet('errors.no_database_hint', 'Use LOAD DATABASE to select a package first.'), 't-dim');
     print('');
 }
 
@@ -1746,6 +1821,11 @@ function processCommand(input) {
         return;
     }
 
+    if (command === 'liebi') {
+        startLiebiGame();
+        return;
+    }
+
     if (command === 'load' && args.toLowerCase() === 'status') {
         if (!adminMode) {
             printAdminRequired('LOAD STATUS');
@@ -1755,8 +1835,13 @@ function processCommand(input) {
         return;
     }
 
-    if (command === 'load' && (!args || args.toLowerCase() === 'database')) {
+    if (command === 'load' && args.toLowerCase() === 'file') {
         document.getElementById('fileInput').click();
+        return;
+    }
+
+    if (command === 'load' && (!args || args.toLowerCase() === 'database')) {
+        showDatabaseSelector();
         return;
     }
     
@@ -1821,12 +1906,7 @@ function processCommand(input) {
         showCategories();
     } else if (command === 'search') {
         if (!databaseLoaded) {
-            AudioEngine.errorBuzz();
-            clearOutput();
-            print('');
-            print('ERROR: No database loaded.', 't-red');
-            print('Use LOAD DATABASE to import data first.', 't-dim');
-            print('');
+            printNoDatabaseLoaded();
         } else if (args) {
             searchDatabase(args);
         } else {
@@ -1841,12 +1921,7 @@ function processCommand(input) {
             return;
         }
         if (!databaseLoaded) {
-            AudioEngine.errorBuzz();
-            clearOutput();
-            print('');
-            print('ERROR: No database loaded.', 't-red');
-            print('Use LOAD DATABASE to import data first.', 't-dim');
-            print('');
+            printNoDatabaseLoaded();
         } else if (args) {
             fuzzySearch(args);
         } else {
@@ -1872,43 +1947,51 @@ function processCommand(input) {
         clearOutput();
         print('');
         print(`Unknown command: ${command}`, 't-red');
-        print('Use the menu to navigate commands.', 't-dim');
+        print(contentGet('errors.unknown_command_hint', 'Use the menu to navigate commands.'), 't-dim');
         print('');
     }
 }
 
 function showWelcome() {
     clearOutput();
-    print('═══════════════════════════════════════════════════════', 't-dim');
-    print('              ARES MACROTECHNOLOGY', 't-bright');
-    print('═══════════════════════════════════════════════════════', 't-dim');
-    print('');
-    print('WELCOME, AUTHORIZED PERSONNEL ASSET.', 't-cyan');
-    print('');
-    print('This terminal provides controlled access to Black Desert');
-    print('Research Facility database, diagnostic, and status systems.');
-    print('');
-    print('All employees are reminded that compliance is productivity.');
-    print('Productivity is margin. Margin is shareholder confidence.', 't-amber');
-    print('');
-    print('Obey issued directives, fulfill assigned duties, and report');
-    print('facility anomalies before they become expensive.');
-    print('');
-    print('Ares values dedication, discretion, and replaceable efficiency.', 't-red');
-    print('Use HELP for command guidance.', 't-dim');
-    print('═══════════════════════════════════════════════════════', 't-dim');
+    const fallback = [
+        '═══════════════════════════════════════════════════════',
+        '              ARES MACROTECHNOLOGY',
+        '═══════════════════════════════════════════════════════',
+        '',
+        'WELCOME, AUTHORIZED PERSONNEL ASSET.',
+        '',
+        'This terminal provides controlled access to Black Desert',
+        'Research Facility database, diagnostic, and status systems.',
+        '',
+        'All employees are reminded that compliance is productivity.',
+        'Productivity is margin. Margin is shareholder confidence.',
+        '',
+        'Obey issued directives, fulfill assigned duties, and report',
+        'facility anomalies before they become expensive.',
+        '',
+        'Ares values dedication, discretion, and replaceable efficiency.',
+        'Use HELP for command guidance.',
+        '═══════════════════════════════════════════════════════'
+    ];
+    contentLines('welcome', fallback).forEach((line, index) => print(line, contentClass('welcome', index, index < 3 || index === fallback.length - 1 ? 't-dim' : '')));
 }
 
 function showHelp() {
     clearOutput();
+    const customHelp = contentLines('help', []);
+    if (customHelp.length) {
+        customHelp.forEach((line, index) => print(line, contentClass('help', index, '')));
+        return;
+    }
     print('═══════════════════════════════════════════════════════', 't-dim');
     print('                    SYSTEM MANUAL', 't-bright');
     print('═══════════════════════════════════════════════════════', 't-dim');
     print('');
     print('LOAD DATABASE', 't-cyan');
-    print('  Opens file selector to import encrypted database.');
-    print('  Accepts .dat files created with the encoder tool.');
-    print('  Database must be loaded before searching.');
+    print('  Opens the in-terminal database selector.');
+    print('  Select a package, then enter that package password.');
+    print('  Local .md, .txt, or .dat fallback is still available with LOAD FILE.');
     print('');
     print('SEARCH', 't-cyan');
     print('  Query database by exact entry title.');
@@ -1969,23 +2052,16 @@ function showHelp() {
 
 function showCategories() {
     if (!databaseLoaded) {
-        AudioEngine.errorBuzz();
-        clearOutput();
-        print('');
-        print('ERROR: No database loaded.', 't-red');
-        print('Use LOAD DATABASE to import data first.', 't-dim');
-        print('');
+        printNoDatabaseLoaded();
         return;
     }
     
     clearOutput();
     const categories = {};
-    for (let key in database) {
-        const entry = database[key];
-        if (entry.category === 'CONFIDENTIAL' && !adminMode) continue;
+    visibleDatabaseEntries().forEach(entry => {
         if (!categories[entry.category]) categories[entry.category] = 0;
         categories[entry.category]++;
-    }
+    });
     
     print('');
     print('DATABASE CATEGORIES', 't-bright');
@@ -2000,10 +2076,8 @@ function showCategories() {
 
 function searchDatabase(term) {
     const searchTerm = term.toLowerCase();
-    for (let key in database) {
-        const entry = database[key];
-        if (entry.category === 'CONFIDENTIAL' && !adminMode) continue;
-        if (key === searchTerm) {
+    for (const entry of visibleDatabaseEntries()) {
+        if (entry.title.toLowerCase() === searchTerm || String(entry.id || '').toLowerCase() === searchTerm) {
             AudioEngine.successTone();
             clearOutput();
             print('');
@@ -2016,7 +2090,7 @@ function searchDatabase(term) {
     AudioEngine.errorBuzz();
     clearOutput();
     print('');
-    print('SEARCH QUERY RETURNED NO RESULT', 't-red');
+    print(contentGet('errors.search_no_result', 'SEARCH QUERY RETURNED NO RESULT'), 't-red');
     print(`Query: "${term}"`, 't-dim');
     print('Search requires exact title match.', 't-dim');
     print('');
@@ -2025,11 +2099,11 @@ function searchDatabase(term) {
 function fuzzySearch(term) {
     const matches = [];
     const searchTerm = term.toLowerCase();
-    for (let key in database) {
-        const entry = database[key];
-        if (key.includes(searchTerm) || 
+    for (const entry of visibleDatabaseEntries(adminMode)) {
+        if (String(entry.id || '').toLowerCase().includes(searchTerm) ||
             entry.title.toLowerCase().includes(searchTerm) ||
-            entry.content.toLowerCase().includes(searchTerm)) {
+            entry.content.toLowerCase().includes(searchTerm) ||
+            String(entry.tags || '').toLowerCase().includes(searchTerm)) {
             matches.push(entry);
         }
     }
@@ -2038,7 +2112,7 @@ function fuzzySearch(term) {
     if (matches.length === 0) {
         AudioEngine.errorBuzz();
         print('');
-        print('SEARCH QUERY RETURNED NO RESULT', 't-red');
+        print(contentGet('errors.search_no_result', 'SEARCH QUERY RETURNED NO RESULT'), 't-red');
         print(`Query: "${term}"`, 't-dim');
         print('');
     } else {
@@ -2052,19 +2126,13 @@ function fuzzySearch(term) {
 
 function listAllEntries() {
     if (!databaseLoaded) {
-        AudioEngine.errorBuzz();
-        clearOutput();
-        print('');
-        print('ERROR: No database loaded.', 't-red');
-        print('Use LOAD DATABASE to import data first.', 't-dim');
-        print('');
+        printNoDatabaseLoaded();
         return;
     }
     
     clearOutput();
     const categories = {};
-    for (let key in database) {
-        const entry = database[key];
+    for (const entry of databaseEntries) {
         if (!categories[entry.category]) categories[entry.category] = [];
         categories[entry.category].push(entry.title);
     }
@@ -2080,11 +2148,25 @@ function listAllEntries() {
     }
 }
 
+function visibleDatabaseEntries(includeConfidential = adminMode) {
+    return databaseEntries.filter(entry => includeConfidential || !entryRequiresAdmin(entry));
+}
+
+function entryRequiresAdmin(entry) {
+    const clearance = Number.parseInt(entry.clearance || '0', 10);
+    return entry.category === 'CONFIDENTIAL' || entry.confidential || clearance >= 4;
+}
+
 function printEntry(entry) {
-    const cls = entry.category === 'CONFIDENTIAL' ? 't-magenta' : 't-cyan';
+    const cls = entryRequiresAdmin(entry) ? 't-magenta' : 't-cyan';
     print(`[${entry.category}] ${entry.title}`, cls);
     print('───────────────────────────────────────────', 't-dim');
+    if (entry.id) print(`ID: ${entry.id}`, 't-dim');
+    if (entry.clearance) print(`CLEARANCE: ${entry.clearance}`, 't-amber');
+    if (entry.tags) print(`TAGS: ${entry.tags}`, 't-dim');
     print(entry.content);
+    if (entry.related) print(`RELATED: ${entry.related}`, 't-cyan');
+    if (entry.redacted) print(`REDACTED: ${entry.redacted}`, 't-red');
     print('');
 }
 
@@ -2171,8 +2253,11 @@ function clearStoredStatusProfile() {
 }
 
 function statusGet(key, fallback = '') {
-    const value = statusProfile.values[normalizeStatusKey(key)];
-    return value === undefined || value === '' ? fallback : value;
+    const normalized = normalizeStatusKey(key);
+    const value = statusProfile.values[normalized];
+    if (value !== undefined && value !== '') return value;
+    const contentValue = terminalContent.values[normalized];
+    return contentValue === undefined || contentValue === '' ? fallback : contentValue;
 }
 
 function statusNumber(key, fallback = 0, min = -Infinity, max = Infinity) {
@@ -2202,7 +2287,12 @@ function statusSectionIds(prefix) {
     if (cached) return cached.slice();
 
     const ids = new Set();
-    if (!statusProfileKeyCache) statusProfileKeyCache = Object.keys(statusProfile.values);
+    if (!statusProfileKeyCache) {
+        statusProfileKeyCache = Array.from(new Set([
+            ...Object.keys(terminalContent.values),
+            ...Object.keys(statusProfile.values)
+        ]));
+    }
     statusProfileKeyCache.forEach(key => {
         if (!key.startsWith(prefixKey)) return;
         const id = key.slice(prefixKey.length).split('.')[0];
@@ -2218,6 +2308,127 @@ function sortStatusIds(a, b) {
     const bn = Number.parseInt(b, 10);
     if (Number.isFinite(an) && Number.isFinite(bn) && an !== bn) return an - bn;
     return a.localeCompare(b);
+}
+
+async function loadTerminalContent() {
+    try {
+        const response = await fetch('content/terminal-content.md', { cache: 'no-store' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const content = await response.text();
+        const profile = parseStatusProfile(content, 'content/terminal-content.md');
+        setTerminalContent(profile);
+    } catch (error) {
+        setTerminalContent({ loaded: false, values: {} });
+    }
+}
+
+function contentGet(key, fallback = '') {
+    const normalized = normalizeStatusKey(key);
+    const value = terminalContent.values[normalized];
+    return value === undefined || value === '' ? fallback : value;
+}
+
+function contentLines(prefix, fallbackLines = []) {
+    const lines = [];
+    for (let i = 1; i <= 50; i++) {
+        const key = normalizeStatusKey(`${prefix}.line${i}`);
+        if (Object.prototype.hasOwnProperty.call(terminalContent.values, key)) {
+            lines.push(terminalContent.values[key]);
+        }
+    }
+    if (lines.length) return lines;
+
+    const packed = contentGet(`${prefix}.lines`, '');
+    if (packed) {
+        return packed.split('|').map(line => line.trim()).filter(Boolean);
+    }
+    return fallbackLines.slice();
+}
+
+function contentClass(prefix, index, fallback = '') {
+    return contentGet(`${prefix}.class${index + 1}`, fallback);
+}
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function getBootLogoMarkup(fallbackMarkup) {
+    const lines = contentLines('boot.logo', []);
+    if (!lines.length) return fallbackMarkup;
+    return lines
+        .map(line => `<span style="color:#ffb000">${escapeHtml(line)}</span>`)
+        .join('\n');
+}
+
+function applyTerminalContentToDom() {
+    const title = contentGet('terminal.title', '');
+    if (title) {
+        document.title = title;
+        document.querySelectorAll('.system-title').forEach(element => { element.textContent = title; });
+    }
+
+    const build = contentGet('terminal.build', '');
+    if (build) {
+        document.querySelectorAll('.header-info .hl').forEach((element, index) => {
+            if (index === 0) element.textContent = build;
+        });
+    }
+
+    const diagnosticTitle = contentGet('diagnostic.title', '');
+    if (diagnosticTitle) {
+        const element = getById('diagnosticTitle');
+        if (element) element.textContent = diagnosticTitle;
+    }
+    const facilityTitle = contentGet('facility.title', '');
+    if (facilityTitle) {
+        const element = getById('facilityTitle');
+        if (element) element.textContent = facilityTitle;
+    }
+    const accessError = contentGet('admin.access_denied', '');
+    if (accessError) {
+        const element = getById('accessError');
+        if (element) element.textContent = accessError;
+    }
+
+    document.querySelectorAll('.menu-item[data-cmd]').forEach(item => {
+        const label = contentGet(`commands.${item.dataset.cmd}`, '');
+        const labelElement = item.querySelector('span:not(.icon)');
+        if (label && labelElement) labelElement.textContent = label.toUpperCase();
+    });
+
+    const diagnosticLabels = {
+        diagNetworkCard: 'diagnostic.label.network',
+        diagSecurityCard: 'diagnostic.label.security',
+        diagOutpostCard: 'diagnostic.label.outposts',
+        diagGeneratorCard: 'diagnostic.label.generator',
+        diagPowerCard: 'diagnostic.label.power',
+        diagAlarmCard: 'diagnostic.label.alarm',
+        diagLifeCard: 'diagnostic.label.life'
+    };
+    Object.entries(diagnosticLabels).forEach(([cardId, key]) => {
+        const card = getById(cardId);
+        const label = contentGet(key, '');
+        const span = card ? card.querySelector('.diagnostic-label span:first-child') : null;
+        if (label && span) span.textContent = label.toUpperCase();
+    });
+
+    const facilityLabels = {
+        facilityOverview: 'facility.label.overview',
+        facilityZones: 'facility.label.zones',
+        facilityContacts: 'facility.label.contacts'
+    };
+    Object.entries(facilityLabels).forEach(([readoutId, key]) => {
+        const readout = getById(readoutId);
+        const label = contentGet(key, '');
+        const titleElement = readout ? readout.closest('.facility-card')?.querySelector('.facility-card-title') : null;
+        if (label && titleElement) titleElement.textContent = label.toUpperCase();
+    });
 }
 
 function getBootSequence() {
@@ -3156,7 +3367,8 @@ function grantAdminAccess() {
     clearOutput();
     print('');
     print('▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓', 't-red');
-    print('▓     ADMINISTRATOR ACCESS GRANTED       ▓', 't-red');
+    const grantedText = contentGet('admin.access_granted', 'ADMINISTRATOR ACCESS GRANTED').toUpperCase();
+    print(`▓     ${grantedText.padEnd(35, ' ').slice(0, 35)}▓`, 't-red');
     print('▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓', 't-red');
     print('');
     print('Additional commands unlocked:', 't-amber');
@@ -3191,12 +3403,14 @@ function logout() {
     
     clearOutput();
     print('');
-    print('Administrator session terminated.', 't-red');
+    print(contentGet('admin.logout', 'Administrator session terminated.'), 't-red');
     print('Elevated privileges revoked.', 't-dim');
     print('');
 }
 
 function forceCloseRuntimeOverlays() {
+    closeLiebiGame();
+
     const accessDialog = document.getElementById('accessDialog');
     if (accessDialog) {
         accessDialog.classList.remove('active');
@@ -3266,16 +3480,66 @@ function handleFileSelect(e) {
     if (!file) return;
     
     const fileName = file.name.toLowerCase();
-    if (fileName.endsWith('.dat') || fileName.endsWith('.db') || fileName.endsWith('.bin')) {
+    if (fileName.endsWith('.md') || fileName.endsWith('.markdown') || fileName.endsWith('.txt')) {
+        loadPlainDatabaseFile(file);
+    } else if (fileName.endsWith('.dat') || fileName.endsWith('.db') || fileName.endsWith('.bin')) {
         loadEncryptedFile(file);
     } else {
         AudioEngine.errorBuzz();
         print('');
         print('ERROR: Unsupported file format.', 't-red');
-        print('Expected: encrypted database (.dat)', 't-dim');
+        print('Expected: .md, .txt, or encrypted database (.dat)', 't-dim');
         print('');
     }
     e.target.value = '';
+}
+
+function loadPlainDatabaseFile(file) {
+    print('');
+    print('LOCAL DATABASE FILE DETECTED', 't-amber');
+    print(`Reading: ${file.name}`, 't-dim');
+
+    const reader = new FileReader();
+    reader.onload = function(event) {
+        try {
+            const content = String(event.target.result || '');
+            const markdownDatabase = parseMarkdownDatabase(content, file.name);
+            if (markdownDatabase.entries.length) {
+                promptForParsedDatabase(markdownDatabase, pendingLocalDatabaseItem || { file: file.name, displayName: file.name }, file.name);
+                pendingLocalDatabaseItem = null;
+                return;
+            }
+
+            parseDataFile(content);
+            databaseLoaded = databaseEntries.length > 0;
+            databaseSource = file.name;
+            if (!databaseLoaded) throw new Error('No entries found');
+
+            AudioEngine.dataLoaded();
+            print('');
+            print('DATABASE LOADED', 't-cyan');
+            print(`Database: ${file.name}`, 't-amber');
+            print(`Entries loaded: ${databaseEntries.length}`, 't-cyan');
+            print('');
+            print('Use SEARCH or CATEGORIES to explore.', 't-dim');
+            print('');
+        } catch (error) {
+            pendingLocalDatabaseItem = null;
+            AudioEngine.errorBuzz();
+            print('');
+            print('ERROR: DATABASE LOAD FAILED', 't-red');
+            print('No readable Markdown or legacy entries were found.', 't-dim');
+            print('');
+        }
+    };
+    reader.onerror = function() {
+        pendingLocalDatabaseItem = null;
+        AudioEngine.errorBuzz();
+        print('');
+        print('ERROR: Could not read file.', 't-red');
+        print('');
+    };
+    reader.readAsText(file);
 }
 
 function decodeEncryptedPayload(encoded) {
@@ -3299,6 +3563,8 @@ function decodeDatabasePayload(encoded) {
     const decoded = decodeEncryptedPayload(encoded);
     if (decoded.legacyPlaintext.includes(':') && decoded.legacyPlaintext.includes('|')) return decoded.legacyPlaintext;
     if (decoded.utf8Plaintext.includes(':') && decoded.utf8Plaintext.includes('|')) return decoded.utf8Plaintext;
+    if (parseMarkdownDatabase(decoded.utf8Plaintext).entries.length) return decoded.utf8Plaintext;
+    if (parseMarkdownDatabase(decoded.legacyPlaintext).entries.length) return decoded.legacyPlaintext;
     return decoded.preferred;
 }
 
@@ -3323,6 +3589,346 @@ function handleStatusFileSelect(e) {
         print('');
     }
     e.target.value = '';
+}
+
+async function fetchTextFile(path) {
+    const response = await fetch(path, { cache: 'no-store' });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.text();
+}
+
+async function loadDatabaseManifest() {
+    if (databaseManifest) return databaseManifest;
+    try {
+        const response = await fetch('databases/manifest.json', { cache: 'no-store' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const manifest = await response.json();
+        if (!manifest || !Array.isArray(manifest.databases)) throw new Error('Invalid manifest');
+        databaseManifestSource = 'manifest';
+        databaseManifest = manifest.databases;
+    } catch (error) {
+        databaseManifestSource = 'fallback';
+        databaseManifest = FALLBACK_DATABASE_MANIFEST.map(item => ({ ...item, fallback: true }));
+    }
+    return databaseManifest;
+}
+
+function closeDatabaseModal() {
+    const modal = getById('databaseModal');
+    if (modal) modal.remove();
+    activeDatabaseSelection = null;
+    pendingLocalDatabaseItem = null;
+}
+
+function createDatabaseModal(titleText) {
+    closeDatabaseModal();
+    const overlay = document.createElement('div');
+    overlay.className = 'database-modal-overlay';
+    overlay.id = 'databaseModal';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-labelledby', 'databaseModalTitle');
+
+    const panel = document.createElement('div');
+    panel.className = 'database-modal-panel glow';
+
+    const header = document.createElement('div');
+    header.className = 'database-modal-header';
+    const title = document.createElement('div');
+    title.className = 'database-modal-title';
+    title.id = 'databaseModalTitle';
+    title.textContent = titleText;
+    const close = document.createElement('button');
+    close.className = 'database-modal-close';
+    close.type = 'button';
+    close.textContent = '[ CLOSE ]';
+    close.addEventListener('click', closeDatabaseModal);
+    header.append(title, close);
+
+    const body = document.createElement('div');
+    body.className = 'database-modal-body';
+    body.id = 'databaseModalBody';
+
+    panel.append(header, body);
+    overlay.appendChild(panel);
+    overlay.addEventListener('click', event => {
+        if (event.target === overlay) closeDatabaseModal();
+    });
+    document.body.appendChild(overlay);
+    close.focus();
+    return { overlay, body };
+}
+
+function ensureDatabaseModal(titleText = 'LOAD DATABASE') {
+    const existingBody = getById('databaseModalBody');
+    if (existingBody) return existingBody;
+    return createDatabaseModal(titleText).body;
+}
+
+function renderDatabaseSelectorList(body, manifest) {
+    body.textContent = '';
+    const intro = document.createElement('p');
+    intro.className = 'database-modal-copy';
+    intro.textContent = 'Select a database package. Password authentication is roleplay clearance only.';
+    body.appendChild(intro);
+
+    if (databaseManifestSource === 'fallback') {
+        const warning = document.createElement('p');
+        warning.className = 'database-modal-copy t-amber';
+        warning.textContent = 'Manifest fetch is blocked or unavailable. Showing the default database list. If you opened index.html directly, the next step may ask you to select the matching local .md file manually.';
+        body.appendChild(warning);
+    }
+
+    const list = document.createElement('div');
+    list.className = 'database-list';
+    manifest.forEach(item => {
+        const button = document.createElement('button');
+        button.className = 'database-choice';
+        button.type = 'button';
+        const name = document.createElement('span');
+        name.className = 'database-choice-name';
+        name.textContent = item.displayName || item.name || item.file;
+        const description = document.createElement('span');
+        description.className = 'database-choice-description';
+        description.textContent = item.description || item.file;
+        button.append(name, description);
+        button.addEventListener('click', () => prepareManifestDatabase(item));
+        list.appendChild(button);
+    });
+    body.appendChild(list);
+}
+
+async function showDatabaseSelector() {
+    const { body } = createDatabaseModal('LOAD DATABASE');
+    body.textContent = 'Reading database manifest...';
+
+    const manifest = await loadDatabaseManifest();
+    renderDatabaseSelectorList(body, manifest);
+}
+
+async function prepareManifestDatabase(item) {
+    const modal = getById('databaseModal');
+    const body = getById('databaseModalBody');
+    if (!modal || !body) return;
+    body.textContent = 'Fetching database package...';
+    try {
+        const path = `databases/${item.file || item.filename}`;
+        const content = await fetchTextFile(path);
+        const parsed = parseMarkdownDatabase(content, item.displayName || item.name || item.file);
+        if (!parsed.entries.length) throw new Error('No entries found');
+        promptForParsedDatabase(parsed, item, path);
+    } catch (error) {
+        renderLocalDatabasePrompt(item);
+        AudioEngine.errorBuzz();
+    }
+}
+
+function promptForParsedDatabase(parsed, item = {}, path = '') {
+    ensureDatabaseModal('LOAD DATABASE');
+    activeDatabaseSelection = { item, parsed, path };
+    renderDatabasePasswordPrompt(parsed);
+}
+
+function renderLocalDatabasePrompt(item = {}) {
+    const body = ensureDatabaseModal('LOAD DATABASE');
+    body.textContent = '';
+    const fileName = item.file || item.filename || 'database.md';
+    const message = document.createElement('p');
+    message.className = 'database-modal-copy t-amber';
+    message.textContent = `${contentGet('errors.database_package_fail', 'DATABASE PACKAGE FAILED TO LOAD.')} The browser could not fetch databases/${fileName}. If you opened the page directly from disk, select that file manually from the databases folder.`;
+    const select = document.createElement('button');
+    select.className = 'database-modal-action';
+    select.type = 'button';
+    select.textContent = `SELECT ${fileName.toUpperCase()}`;
+    select.addEventListener('click', () => {
+        pendingLocalDatabaseItem = item;
+        document.getElementById('fileInput').click();
+    });
+    const back = document.createElement('button');
+    back.className = 'database-modal-action secondary';
+    back.type = 'button';
+    back.textContent = 'BACK TO DATABASE LIST';
+    back.addEventListener('click', showDatabaseSelector);
+    const actions = document.createElement('div');
+    actions.className = 'database-modal-actions';
+    actions.append(select, back);
+    body.append(message, actions);
+}
+
+function renderDatabasePasswordPrompt(parsed) {
+    const body = getById('databaseModalBody');
+    if (!body) return;
+    body.textContent = '';
+    const title = document.createElement('p');
+    title.className = 'database-modal-copy';
+    title.textContent = `Selected: ${parsed.metadata.title || parsed.source}`;
+    const description = document.createElement('p');
+    description.className = 'database-modal-copy t-dim';
+    description.textContent = parsed.metadata.description || 'Enter package clearance password.';
+    const input = document.createElement('input');
+    input.className = 'database-password-input';
+    input.type = 'password';
+    input.placeholder = 'Database password...';
+    input.setAttribute('aria-label', 'Database password');
+    const error = document.createElement('div');
+    error.className = 'database-password-error';
+    const actions = document.createElement('div');
+    actions.className = 'database-modal-actions';
+    const submit = document.createElement('button');
+    submit.className = 'database-modal-action';
+    submit.type = 'button';
+    submit.textContent = 'AUTHENTICATE';
+    const back = document.createElement('button');
+    back.className = 'database-modal-action secondary';
+    back.type = 'button';
+    back.textContent = 'BACK';
+    actions.append(submit, back);
+    body.append(title, description, input, error, actions);
+
+    const authenticate = () => {
+        const expected = String(parsed.metadata.password || '').trim();
+        if (input.value.trim() === expected) {
+            loadParsedDatabase(parsed);
+            closeDatabaseModal();
+        } else {
+            error.textContent = contentGet('errors.database_password_fail', 'ACCESS DENIED - INVALID DATABASE PASSWORD');
+            input.value = '';
+            input.focus();
+            AudioEngine.errorBuzz();
+        }
+    };
+    submit.addEventListener('click', authenticate);
+    input.addEventListener('keydown', event => {
+        if (event.key === 'Enter') authenticate();
+        if (event.key === 'Escape') closeDatabaseModal();
+    });
+    back.addEventListener('click', showDatabaseSelector);
+    input.focus();
+}
+
+function parseSimpleMetadata(lines) {
+    const values = {};
+    lines.forEach(line => {
+        const pair = line.match(/^([a-z0-9_.-]+)\s*:\s*(.*)$/i);
+        if (pair) values[normalizeStatusKey(pair[1])] = cleanStatusValue(pair[2]);
+    });
+    return values;
+}
+
+function parseMarkdownDatabase(content, source = 'Markdown database') {
+    const clean = String(content || '')
+        .replace(/\r/g, '')
+        .replace(/<!--[\s\S]*?-->/g, '');
+    const lines = clean.split('\n');
+    const metadataLines = [];
+    let startIndex = 0;
+    if (lines[0]?.trim() === '---') {
+        for (let i = 1; i < lines.length; i++) {
+            if (lines[i].trim() === '---') {
+                startIndex = i + 1;
+                break;
+            }
+            metadataLines.push(lines[i]);
+        }
+    }
+    const metadata = parseSimpleMetadata(metadataLines);
+    const entries = [];
+    let category = '';
+    let current = null;
+    let bodyMode = false;
+
+    function finishEntry() {
+        if (!current) return;
+        current.title = current.title || current.id || 'Untitled Entry';
+        current.category = current.category || category || 'GENERAL';
+        current.content = current.bodyLines.join('\n').trim();
+        if (!current.content) current.content = 'NO BODY TEXT AVAILABLE.';
+        delete current.bodyLines;
+        entries.push(current);
+        current = null;
+        bodyMode = false;
+    }
+
+    for (let i = startIndex; i < lines.length; i++) {
+        const raw = lines[i];
+        const line = raw.trim();
+        if (!line) {
+            if (bodyMode && current) current.bodyLines.push('');
+            continue;
+        }
+
+        const categoryMatch = line.match(/^##\s+Category\s*:\s*(.+)$/i);
+        if (categoryMatch) {
+            finishEntry();
+            category = categoryMatch[1].trim().toUpperCase();
+            continue;
+        }
+
+        const entryMatch = line.match(/^###\s+(?:Entry\s*:\s*)?(.+)$/i);
+        if (entryMatch) {
+            finishEntry();
+            current = {
+                id: '',
+                title: entryMatch[1].trim(),
+                category,
+                tags: '',
+                clearance: '1',
+                related: '',
+                redacted: '',
+                bodyLines: []
+            };
+            bodyMode = false;
+            continue;
+        }
+
+        if (!current) continue;
+
+        if (/^body\s*:\s*$/i.test(line)) {
+            bodyMode = true;
+            continue;
+        }
+
+        const pair = line.match(/^([a-z0-9_.-]+)\s*:\s*(.*)$/i);
+        if (pair && !bodyMode) {
+            const key = normalizeStatusKey(pair[1]);
+            const value = cleanStatusValue(pair[2]);
+            if (key === 'keywords') current.tags = value;
+            else if (key === 'clearance_level') current.clearance = value;
+            else current[key] = value;
+            continue;
+        }
+
+        current.bodyLines.push(raw.replace(/^\s{0,4}/, ''));
+    }
+    finishEntry();
+
+    entries.forEach(entry => {
+        entry.confidential = entryRequiresAdmin(entry);
+    });
+
+    return { source, metadata, entries };
+}
+
+function loadParsedDatabase(parsed) {
+    database = {};
+    databaseEntries = parsed.entries.slice();
+    parsed.entries.forEach(entry => {
+        const key = entry.title.toLowerCase();
+        database[key] = entry;
+        if (entry.id) database[entry.id.toLowerCase()] = entry;
+    });
+    databaseLoaded = true;
+    databaseSource = parsed.metadata.title || parsed.source || 'MARKDOWN DATABASE';
+    updateEntryCount();
+    AudioEngine.dataLoaded();
+    clearOutput();
+    print('');
+    print('DATABASE AUTHENTICATED', 't-cyan');
+    print(`Database: ${databaseSource}`, 't-amber');
+    print(`Entries loaded: ${parsed.entries.length}`, 't-cyan');
+    print('');
+    print('Use SEARCH, CATEGORIES, or admin LIST ALL to explore.', 't-dim');
+    print('');
 }
 
 function loadStatusProfileFile(file) {
@@ -3379,15 +3985,19 @@ function loadEncryptedFile(file) {
         try {
             const encoded = event.target.result.trim();
             const decrypted = decodeDatabasePayload(encoded);
-            
-            if (decrypted.includes(':') && decrypted.includes('|')) {
+
+            const markdownDatabase = parseMarkdownDatabase(decrypted, file.name);
+            if (markdownDatabase.entries.length) {
+                promptForParsedDatabase(markdownDatabase, { file: file.name, displayName: file.name }, file.name);
+            } else if (decrypted.includes(':') && decrypted.includes('|')) {
                 parseDataFile(decrypted);
                 databaseLoaded = true;
+                databaseSource = file.name;
                 AudioEngine.dataLoaded();
                 print('');
                 print('DECRYPTION SUCCESSFUL', 't-cyan');
                 print(`Database: ${file.name}`, 't-amber');
-                print(`Entries loaded: ${Object.keys(database).length}`, 't-cyan');
+                print(`Entries loaded: ${databaseEntries.length}`, 't-cyan');
                 print('');
                 print('Use SEARCH or CATEGORIES to explore.', 't-dim');
                 print('');
@@ -3413,6 +4023,7 @@ function loadEncryptedFile(file) {
 
 function parseDataFile(content) {
     database = {};
+    databaseEntries = [];
     const entries = content.split('\n\n');
     entries.forEach(entry => {
         entry = entry.trim();
@@ -3425,7 +4036,9 @@ function parseDataFile(content) {
             if (pipeIdx > -1) {
                 const title = rest.substring(0, pipeIdx).trim();
                 const entryContent = rest.substring(pipeIdx + 1).trim();
-                database[title.toLowerCase()] = { category, title, content: entryContent };
+                const parsedEntry = { id: title.toLowerCase().replace(/\s+/g, '-'), category, title, content: entryContent, clearance: category === 'CONFIDENTIAL' ? '4' : '1' };
+                database[title.toLowerCase()] = parsedEntry;
+                databaseEntries.push(parsedEntry);
             }
         }
     });
@@ -3433,8 +4046,1124 @@ function parseDataFile(content) {
 }
 
 function updateEntryCount() {
-    const count = Object.values(database).filter(e => e.category !== 'CONFIDENTIAL').length;
+    const entries = databaseEntries.length ? databaseEntries : Object.values(database);
+    const seen = new Set();
+    const count = entries.filter(entry => {
+        if (!entry || seen.has(entry.title)) return false;
+        seen.add(entry.title);
+        return !entryRequiresAdmin(entry);
+    }).length;
     document.getElementById('entryCount').textContent = count;
+}
+
+// ========================================
+// SECRET RAYCAST MINI-GAME - LIEBI
+// ========================================
+let liebiGameCleanup = null;
+
+const LIEBI_MAP_TEMPLATE = [
+    '########################',
+    '#P..A....#......1......#',
+    '#.####...#.#######.###.#',
+    '#....#...D.....#...#...#',
+    '####.#.#######.#.###.#.#',
+    '#....#.....1...#.....#.#',
+    '#.#########.#######.##.#',
+    '#.....M...#.....A...#..#',
+    '#.#####.#.###D#####.#.##',
+    '#.#...#.#.....#...#....#',
+    '#.#...#.#.#####...####.#',
+    '#.#...#.....#.#...#..#.#',
+    '#.#########.#.#####..#.#',
+    '#.....2.....#....KR.X#.#',
+    '#####.###########.####.#',
+    '#...#.....VW....#......#',
+    '#.#.#####.#####.######.#',
+    '#.#.....#...3...#S.....#',
+    '#...A...#.......#..M...#',
+    '########################'
+];
+
+const LIEBI_ASSET_SOURCES = {
+    pistols: 'https://opengameart.org/sites/default/files/pistols.png',
+    shotguns: 'https://opengameart.org/sites/default/files/shotguns.png',
+    neonpunk: 'https://opengameart.org/sites/default/files/neonpunk.png',
+    armor: 'https://opengameart.org/sites/default/files/armor.png',
+    enemyC: 'https://opengameart.org/sites/default/files/enemy_type_c_spritesheet_64x64x16.png',
+    enemyD: 'https://opengameart.org/sites/default/files/enemy_type_d_spritesheet_64x64x8.png',
+    wallChip: 'https://opengameart.org/sites/default/files/scifi_bg_chip2.png'
+};
+
+let liebiAssetCache = null;
+
+function getLiebiAssets() {
+    if (liebiAssetCache) return liebiAssetCache;
+    const images = {};
+    Object.entries(LIEBI_ASSET_SOURCES).forEach(([key, url]) => {
+        const img = new Image();
+        img.decoding = 'async';
+        img.loading = 'eager';
+        img.src = url;
+        images[key] = img;
+    });
+    liebiAssetCache = {
+        images,
+        ready(key) {
+            const img = images[key];
+            return Boolean(img && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0);
+        }
+    };
+    return liebiAssetCache;
+}
+
+function liebiElement(tag, className, text) {
+    const element = document.createElement(tag);
+    if (className) element.className = className;
+    if (text !== undefined) element.textContent = text;
+    return element;
+}
+
+function createLiebiGameOverlay() {
+    const overlay = liebiElement('div', 'liebi-overlay');
+    overlay.id = 'liebiOverlay';
+    overlay.tabIndex = -1;
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-labelledby', 'liebiTitle');
+
+    const shell = liebiElement('div', 'liebi-shell');
+    const topbar = liebiElement('div', 'liebi-topbar');
+    const title = liebiElement('div', 'liebi-title glow', 'ARES BLACKSITE SIM // LIEBI');
+    title.id = 'liebiTitle';
+    const objective = liebiElement('div', 'liebi-objective', 'OBJECTIVE: KEYCARD / DATA SHARD / EXIT');
+    const closeButton = liebiElement('button', 'liebi-close glow', '[ ESC EXIT ]');
+    closeButton.type = 'button';
+    closeButton.id = 'liebiClose';
+    topbar.append(title, objective, closeButton);
+
+    const stage = liebiElement('div', 'liebi-stage');
+    const canvasWrap = liebiElement('div', 'liebi-canvas-wrap');
+    const canvas = document.createElement('canvas');
+    canvas.id = 'liebiCanvas';
+    canvas.width = 360;
+    canvas.height = 220;
+    canvas.setAttribute('aria-label', 'Retro raycast security breach simulation');
+    canvasWrap.appendChild(canvas);
+
+    const modal = liebiElement('div', 'liebi-modal');
+    modal.id = 'liebiModal';
+    const modalCard = liebiElement('div', 'liebi-modal-card');
+    const modalTitle = liebiElement('div', 'liebi-modal-title glow');
+    modalTitle.id = 'liebiModalTitle';
+    const modalText = liebiElement('div', 'liebi-modal-text');
+    modalText.id = 'liebiModalText';
+    const actions = liebiElement('div', 'liebi-actions');
+    const restartButton = liebiElement('button', 'liebi-action', 'RESTART SIM');
+    restartButton.type = 'button';
+    restartButton.id = 'liebiRestart';
+    const exitButton = liebiElement('button', 'liebi-action secondary', 'EXIT');
+    exitButton.type = 'button';
+    exitButton.id = 'liebiExit';
+    actions.append(restartButton, exitButton);
+    modalCard.append(modalTitle, modalText, actions);
+    modal.appendChild(modalCard);
+    canvasWrap.appendChild(modal);
+
+    const hud = liebiElement('div', 'liebi-hud');
+    const healthPanel = liebiPanel('HEALTH', 'liebiHealth', true);
+    const armorPanel = liebiPanel('ARMOR', 'liebiArmor', true);
+    const ammoPanel = liebiPanel('AMMO', 'liebiAmmo');
+    const weaponPanel = liebiPanel('WEAPON', 'liebiWeapon');
+    const shardPanel = liebiPanel('SHARD', 'liebiShard');
+    const keyPanel = liebiPanel('KEY', 'liebiKey');
+    const scorePanel = liebiPanel('SCORE', 'liebiScore');
+    const statusPanel = liebiPanel('STATUS', 'liebiStatus', false, true);
+    hud.append(healthPanel, armorPanel, ammoPanel, weaponPanel, shardPanel, keyPanel, scorePanel, statusPanel);
+    stage.append(canvasWrap, hud);
+
+    const footer = liebiElement('div', 'liebi-footer');
+    const controls = liebiElement('div', 'liebi-controls', 'W/S MOVE | A/D TURN | Q/E STRAFE | SPACE FIRE | F USE | 1/2 WEAPON | M MAP | ESC EXIT');
+    const footerStatus = liebiElement('div', 'liebi-controls', 'SINGLE LEVEL: BLACKSITE SUBLEVEL 03');
+    footer.append(controls, footerStatus);
+
+    shell.append(topbar, stage, footer);
+    overlay.appendChild(shell);
+    return overlay;
+}
+
+function liebiPanel(label, id, hasBar = false, wide = false) {
+    const panel = liebiElement('div', wide ? 'liebi-panel wide' : 'liebi-panel');
+    panel.appendChild(liebiElement('div', 'liebi-label', label));
+    if (hasBar) {
+        const bar = liebiElement('div', 'liebi-bar');
+        const fill = liebiElement('div', 'liebi-bar-fill');
+        fill.id = `${id}Bar`;
+        bar.appendChild(fill);
+        panel.appendChild(bar);
+    }
+    const value = liebiElement('div', 'liebi-value');
+    value.id = id;
+    panel.appendChild(value);
+    return panel;
+}
+
+function createLiebiGameState() {
+    const map = LIEBI_MAP_TEMPLATE.map(row => row.split(''));
+    const pickups = [];
+    const enemies = [];
+    let exit = { x: 20.5, y: 13.5 };
+    let start = { x: 1.6, y: 1.6, angle: 0.05 };
+
+    for (let y = 0; y < map.length; y++) {
+        for (let x = 0; x < map[y].length; x++) {
+            const tile = map[y][x];
+            if (tile === 'P') {
+                start = { x: x + 0.5, y: y + 0.5, angle: 0.05 };
+                map[y][x] = '.';
+            } else if (tile === 'A' || tile === 'M' || tile === 'S' || tile === 'K' || tile === 'V' || tile === 'W') {
+                pickups.push({ x: x + 0.5, y: y + 0.5, type: tile, taken: false, pulse: (x + y) * 0.37 });
+                map[y][x] = '.';
+            } else if (tile === '1' || tile === '2' || tile === '3') {
+                enemies.push(createLiebiEnemy(tile, x + 0.5, y + 0.5));
+                map[y][x] = '.';
+            } else if (tile === 'X') {
+                exit = { x: x + 0.5, y: y + 0.5 };
+            }
+        }
+    }
+
+    return {
+        map,
+        pickups,
+        exit,
+        player: {
+            x: start.x,
+            y: start.y,
+            angle: start.angle,
+            health: 100,
+            armor: 0,
+            ammo: 26,
+            shells: 0,
+            weapon: 'pistol',
+            weapons: { pistol: true, shotgun: false },
+            shard: false,
+            redKey: false,
+            score: 0,
+            kills: 0
+        },
+        enemies,
+        totalEnemies: enemies.length,
+        keys: new Set(),
+        minimap: true,
+        lastShot: 0,
+        muzzle: 0,
+        damageFlash: 0,
+        recoil: 0,
+        message: 'BREACH SIM READY. FIND KEYCARD AND SHARD.',
+        messageUntil: 0,
+        exitWarnAt: 0,
+        won: false,
+        lost: false
+    };
+}
+
+function createLiebiEnemy(tile, x, y) {
+    if (tile === '2') {
+        return { x, y, type: 'drone', hp: 5, maxHp: 5, speed: 0.66, damage: 11, attackRange: 1.05, attackDelay: 850, lastAttack: 0, hitFlash: 0, dead: false, alert: false };
+    }
+    if (tile === '3') {
+        return { x, y, type: 'ic', hp: 7, maxHp: 7, speed: 0.43, damage: 15, attackRange: 5.4, attackDelay: 1450, lastAttack: 0, hitFlash: 0, dead: false, alert: false };
+    }
+    return { x, y, type: 'guard', hp: 4, maxHp: 4, speed: 0.58, damage: 8, attackRange: 3.9, attackDelay: 1200, lastAttack: 0, hitFlash: 0, dead: false, alert: false };
+}
+
+function liebiTileAt(game, x, y) {
+    const row = game.map[y];
+    if (!row || x < 0 || x >= row.length) return '#';
+    return row[x] || '#';
+}
+
+function liebiSetTile(game, x, y, tile) {
+    if (game.map[y] && x >= 0 && x < game.map[y].length) game.map[y][x] = tile;
+}
+
+function liebiIsBlocking(game, x, y) {
+    const tile = liebiTileAt(game, Math.floor(x), Math.floor(y));
+    return tile === '#' || tile === 'D' || tile === 'R';
+}
+
+function liebiCanOccupy(game, x, y) {
+    const radius = 0.18;
+    return !liebiIsBlocking(game, x - radius, y - radius) &&
+        !liebiIsBlocking(game, x + radius, y - radius) &&
+        !liebiIsBlocking(game, x - radius, y + radius) &&
+        !liebiIsBlocking(game, x + radius, y + radius);
+}
+
+function liebiTryMoveEntity(game, entity, dx, dy) {
+    const nextX = entity.x + dx;
+    const nextY = entity.y + dy;
+    if (liebiCanOccupy(game, nextX, entity.y)) entity.x = nextX;
+    if (liebiCanOccupy(game, entity.x, nextY)) entity.y = nextY;
+}
+
+function normalizeAngle(angle) {
+    while (angle < -Math.PI) angle += Math.PI * 2;
+    while (angle > Math.PI) angle -= Math.PI * 2;
+    return angle;
+}
+
+function liebiCastRay(game, angle) {
+    const player = game.player;
+    const rayDirX = Math.cos(angle) || 0.0001;
+    const rayDirY = Math.sin(angle) || 0.0001;
+    let mapX = Math.floor(player.x);
+    let mapY = Math.floor(player.y);
+
+    const deltaDistX = Math.abs(1 / rayDirX);
+    const deltaDistY = Math.abs(1 / rayDirY);
+    const stepX = rayDirX < 0 ? -1 : 1;
+    const stepY = rayDirY < 0 ? -1 : 1;
+    let sideDistX = rayDirX < 0 ? (player.x - mapX) * deltaDistX : (mapX + 1 - player.x) * deltaDistX;
+    let sideDistY = rayDirY < 0 ? (player.y - mapY) * deltaDistY : (mapY + 1 - player.y) * deltaDistY;
+    let side = 0;
+    let tile = '.';
+
+    for (let i = 0; i < 36; i++) {
+        if (sideDistX < sideDistY) {
+            sideDistX += deltaDistX;
+            mapX += stepX;
+            side = 0;
+        } else {
+            sideDistY += deltaDistY;
+            mapY += stepY;
+            side = 1;
+        }
+
+        tile = liebiTileAt(game, mapX, mapY);
+        if (tile === '#' || tile === 'D' || tile === 'R') break;
+    }
+
+    const distance = side === 0
+        ? (mapX - player.x + (1 - stepX) / 2) / rayDirX
+        : (mapY - player.y + (1 - stepY) / 2) / rayDirY;
+    let wallX = side === 0
+        ? player.y + distance * rayDirY
+        : player.x + distance * rayDirX;
+    wallX -= Math.floor(wallX);
+
+    return {
+        distance: Math.max(0.001, Math.abs(distance)),
+        tile,
+        side,
+        mapX,
+        mapY,
+        wallX
+    };
+}
+
+function liebiLineOfSight(game, x1, y1, x2, y2) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const distance = Math.hypot(dx, dy);
+    const steps = Math.max(1, Math.floor(distance / 0.12));
+    for (let i = 1; i < steps; i++) {
+        const t = i / steps;
+        if (liebiIsBlocking(game, x1 + dx * t, y1 + dy * t)) return false;
+    }
+    return true;
+}
+
+function liebiColor(base, shade) {
+    const factor = Math.max(0.08, Math.min(1, shade));
+    return `rgb(${Math.round(base[0] * factor)}, ${Math.round(base[1] * factor)}, ${Math.round(base[2] * factor)})`;
+}
+
+function liebiSfx(kind) {
+    if (!AudioEngine.canPlay()) return;
+    if (kind === 'shot') {
+        AudioEngine.sequence([
+            { type: 'square', frequency: 58, endFrequency: 34, duration: 0.09, gain: 0.09, filterFrequency: 150, attack: 0.002, throttleKey: 'liebiShot', minInterval: 0.08 },
+            { type: 'triangle', frequency: 29, duration: 0.12, gain: 0.035, filterFrequency: 80, startOffset: 0.015 }
+        ]);
+    } else if (kind === 'hit') {
+        AudioEngine.tone({ type: 'sawtooth', frequency: 72, endFrequency: 46, duration: 0.08, gain: 0.07, filterFrequency: 160, throttleKey: 'liebiHit', minInterval: 0.04 });
+    } else if (kind === 'hurt') {
+        AudioEngine.errorBuzz();
+    } else if (kind === 'pickup') {
+        AudioEngine.sequence([
+            { type: 'triangle', frequency: 82, duration: 0.06, gain: 0.058, filterFrequency: 180 },
+            { type: 'triangle', frequency: 118, duration: 0.08, gain: 0.05, filterFrequency: 220, startOffset: 0.06 }
+        ]);
+    } else if (kind === 'door') {
+        AudioEngine.tone({ type: 'square', frequency: 48, endFrequency: 62, duration: 0.1, gain: 0.05, filterFrequency: 150, throttleKey: 'liebiDoor', minInterval: 0.2 });
+    } else if (kind === 'locked') {
+        AudioEngine.sequence([
+            { type: 'sawtooth', frequency: 44, endFrequency: 31, duration: 0.12, gain: 0.06, filterFrequency: 120, throttleKey: 'liebiLocked', minInterval: 0.22 },
+            { type: 'square', frequency: 31, duration: 0.08, gain: 0.03, filterFrequency: 90, startOffset: 0.05 }
+        ]);
+    } else if (kind === 'shotgun') {
+        AudioEngine.sequence([
+            { type: 'square', frequency: 42, endFrequency: 24, duration: 0.15, gain: 0.11, filterFrequency: 130, throttleKey: 'liebiShotgun', minInterval: 0.25 },
+            { type: 'triangle', frequency: 25, duration: 0.18, gain: 0.045, filterFrequency: 75, startOffset: 0.02 }
+        ]);
+    } else if (kind === 'win') {
+        AudioEngine.successTone();
+    }
+}
+
+function closeLiebiGame() {
+    if (liebiGameCleanup) liebiGameCleanup();
+}
+
+function startLiebiGame() {
+    if (liebiGameCleanup || document.getElementById('liebiOverlay')) return;
+
+    const overlay = createLiebiGameOverlay();
+    document.body.appendChild(overlay);
+    overlay.focus();
+
+    const canvas = overlay.querySelector('#liebiCanvas');
+    const ctx = canvas.getContext('2d', { alpha: false });
+    if (!ctx) {
+        overlay.remove();
+        return;
+    }
+    ctx.imageSmoothingEnabled = false;
+
+    const ui = {
+        health: overlay.querySelector('#liebiHealth'),
+        healthBar: overlay.querySelector('#liebiHealthBar'),
+        armor: overlay.querySelector('#liebiArmor'),
+        armorBar: overlay.querySelector('#liebiArmorBar'),
+        ammo: overlay.querySelector('#liebiAmmo'),
+        weapon: overlay.querySelector('#liebiWeapon'),
+        shard: overlay.querySelector('#liebiShard'),
+        key: overlay.querySelector('#liebiKey'),
+        score: overlay.querySelector('#liebiScore'),
+        status: overlay.querySelector('#liebiStatus'),
+        close: overlay.querySelector('#liebiClose'),
+        modal: overlay.querySelector('#liebiModal'),
+        modalTitle: overlay.querySelector('#liebiModalTitle'),
+        modalText: overlay.querySelector('#liebiModalText'),
+        restart: overlay.querySelector('#liebiRestart'),
+        exit: overlay.querySelector('#liebiExit')
+    };
+
+    const game = createLiebiGameState();
+    const width = canvas.width;
+    const height = canvas.height;
+    const fov = Math.PI / 3;
+    const liebiFontFamily = getComputedStyle(document.body).fontFamily;
+    const liebiAssets = getLiebiAssets();
+    const zBuffer = new Float32Array(width);
+    let frameId = null;
+    let lastTime = 0;
+    let hudCache = '';
+    let closed = false;
+
+    function setMessage(text, duration = 1800) {
+        game.message = text;
+        game.messageUntil = performance.now() + duration;
+        updateHud(true);
+    }
+
+    function finishGame(won) {
+        if (game.won || game.lost) return;
+        game.won = won;
+        game.lost = !won;
+        ui.modal.classList.add('active');
+        ui.modalTitle.textContent = won ? 'EXTRACTION COMPLETE' : 'SIMULATION FAILED';
+        ui.modalText.textContent = won
+            ? `Data shard recovered. Hostiles neutralized ${game.player.kills}/${game.totalEnemies}. Score ${game.player.score}.`
+            : 'Personnel asset neutralized. Ares recommends improved obedience and faster reflexes.';
+        liebiSfx(won ? 'win' : 'hurt');
+        updateHud(true);
+    }
+
+    function useNearby() {
+        const player = game.player;
+        const tx = Math.floor(player.x + Math.cos(player.angle) * 1.05);
+        const ty = Math.floor(player.y + Math.sin(player.angle) * 1.05);
+        const tile = liebiTileAt(game, tx, ty);
+        if (tile === 'D') {
+            liebiSetTile(game, tx, ty, '.');
+            player.score += 15;
+            liebiSfx('door');
+            setMessage('SECURITY DOOR OVERRIDE ACCEPTED');
+        } else if (tile === 'R') {
+            if (player.redKey) {
+                liebiSetTile(game, tx, ty, '.');
+                player.score += 80;
+                liebiSfx('door');
+                setMessage('RED KEYCARD ACCEPTED. EXIT ROUTE OPEN.', 2200);
+            } else {
+                liebiSfx('locked');
+                setMessage('RED SECURITY LOCK: KEYCARD REQUIRED', 1500);
+            }
+        } else {
+            setMessage('NO USABLE SURFACE IN RANGE', 650);
+        }
+    }
+
+    function handlePickups() {
+        const player = game.player;
+        game.pickups.forEach(pickup => {
+            if (pickup.taken || Math.hypot(pickup.x - player.x, pickup.y - player.y) > 0.45) return;
+            pickup.taken = true;
+            liebiSfx('pickup');
+            if (pickup.type === 'A') {
+                player.ammo += 12;
+                player.score += 40;
+                setMessage('PISTOL AMMO CACHE ACQUIRED');
+            } else if (pickup.type === 'M') {
+                player.health = Math.min(100, player.health + 32);
+                player.score += 30;
+                setMessage('DOCWAGON FIELD PATCH APPLIED');
+            } else if (pickup.type === 'S') {
+                player.shard = true;
+                player.score += 500;
+                setMessage('DATA SHARD SECURED. PROCEED TO EXIT.', 2600);
+            } else if (pickup.type === 'K') {
+                player.redKey = true;
+                player.score += 220;
+                setMessage('RED SECURITY KEYCARD ACQUIRED', 2200);
+            } else if (pickup.type === 'V') {
+                player.armor = Math.min(100, player.armor + 65);
+                player.score += 70;
+                setMessage('ARMOR VEST SEALED');
+            } else if (pickup.type === 'W') {
+                player.weapons.shotgun = true;
+                player.weapon = 'shotgun';
+                player.shells += 8;
+                player.score += 180;
+                liebiSfx('shotgun');
+                setMessage('ARES ROOM-BROOM SHOTGUN ONLINE', 2400);
+            }
+        });
+    }
+
+    function checkExit(now) {
+        const player = game.player;
+        if (liebiTileAt(game, Math.floor(player.x), Math.floor(player.y)) !== 'X') return;
+        if (player.shard && player.redKey) {
+            player.score += 1000 + player.health * 3 + player.armor * 2 + player.kills * 120;
+            finishGame(true);
+        } else if (now - game.exitWarnAt > 1200) {
+            game.exitWarnAt = now;
+            const missing = [];
+            if (!player.shard) missing.push('DATA SHARD');
+            if (!player.redKey) missing.push('RED KEYCARD');
+            setMessage(`EXIT LOCKED: ${missing.join(' / ')} REQUIRED`);
+            liebiSfx('locked');
+        }
+    }
+
+    function activeWeaponConfig() {
+        if (game.player.weapon === 'shotgun' && game.player.weapons.shotgun) {
+            return { id: 'shotgun', name: 'ROOM-BROOM', ammoKey: 'shells', cost: 1, damage: 5, range: 6.4, delay: 620, cone: 0.22, pelletTargets: 3 };
+        }
+        return { id: 'pistol', name: 'ARES PREDATOR', ammoKey: 'ammo', cost: 1, damage: 2, range: 9, delay: 240, cone: 0.085, pelletTargets: 1 };
+    }
+
+    function switchWeapon(id) {
+        if (id === 'shotgun' && !game.player.weapons.shotgun) {
+            setMessage('SHOTGUN NOT ACQUIRED', 900);
+            liebiSfx('locked');
+            return;
+        }
+        game.player.weapon = id;
+        setMessage(`${activeWeaponConfig().name} SELECTED`, 800);
+        updateHud(true);
+    }
+
+    function applyPlayerDamage(amount, source) {
+        const player = game.player;
+        const armorBlock = Math.min(player.armor, Math.ceil(amount * 0.55));
+        player.armor -= armorBlock;
+        player.health = Math.max(0, player.health - (amount - armorBlock));
+        game.damageFlash = 0.42;
+        setMessage(source, 900);
+        liebiSfx('hurt');
+        if (player.health <= 0) finishGame(false);
+    }
+
+    function shoot(now) {
+        const player = game.player;
+        const weapon = activeWeaponConfig();
+        if (game.won || game.lost || now - game.lastShot < weapon.delay) return;
+        if (player[weapon.ammoKey] < weapon.cost) {
+            setMessage('WEAPON DRY');
+            AudioEngine.errorBuzz();
+            game.lastShot = now;
+            return;
+        }
+
+        player[weapon.ammoKey] -= weapon.cost;
+        game.lastShot = now;
+        game.muzzle = weapon.id === 'shotgun' ? 0.22 : 0.12;
+        game.recoil = weapon.id === 'shotgun' ? 0.35 : 0.16;
+        liebiSfx(weapon.id === 'shotgun' ? 'shotgun' : 'shot');
+
+        const targets = [];
+        game.enemies.forEach(enemy => {
+            if (enemy.dead) return;
+            const dx = enemy.x - player.x;
+            const dy = enemy.y - player.y;
+            const distance = Math.hypot(dx, dy);
+            const angle = Math.abs(normalizeAngle(Math.atan2(dy, dx) - player.angle));
+            const tolerance = weapon.cone + Math.min(0.16, 0.18 / Math.max(1, distance));
+            if (distance < weapon.range && angle < tolerance && liebiLineOfSight(game, player.x, player.y, enemy.x, enemy.y)) {
+                targets.push({ enemy, distance, angle });
+            }
+        });
+        targets.sort((a, b) => a.distance - b.distance);
+
+        if (!targets.length) {
+            setMessage('ROUND IMPACT: NO TARGET LOCK', 750);
+            return;
+        }
+
+        let killed = 0;
+        targets.slice(0, weapon.pelletTargets).forEach((targetInfo, index) => {
+            const target = targetInfo.enemy;
+            const falloff = weapon.id === 'shotgun' ? Math.max(0.45, 1 - targetInfo.distance / 9 - index * 0.12) : 1;
+            const damage = Math.max(1, Math.round(weapon.damage * falloff));
+            target.hp -= damage;
+            target.hitFlash = 0.18;
+            target.alert = true;
+            player.score += 35 + damage * 12;
+            if (target.hp <= 0 && !target.dead) {
+                target.dead = true;
+                killed++;
+                player.kills++;
+                player.score += target.type === 'ic' ? 260 : (target.type === 'drone' ? 190 : 150);
+            }
+        });
+
+        liebiSfx('hit');
+        setMessage(killed ? `${killed} HOSTILE${killed === 1 ? '' : 'S'} NEUTRALIZED` : 'TARGET ARMOR BREACHED', killed ? 1400 : 700);
+    }
+
+    function updateGame(delta, now) {
+        if (game.won || game.lost) return;
+        const player = game.player;
+        const turnSpeed = 2.45;
+        const moveSpeed = 2.25;
+        const strafeSpeed = 1.85;
+
+        if (game.keys.has('a')) player.angle -= turnSpeed * delta;
+        if (game.keys.has('d')) player.angle += turnSpeed * delta;
+        player.angle = normalizeAngle(player.angle);
+
+        let forward = 0;
+        let strafe = 0;
+        if (game.keys.has('w')) forward += 1;
+        if (game.keys.has('s')) forward -= 1;
+        if (game.keys.has('e')) strafe += 1;
+        if (game.keys.has('q')) strafe -= 1;
+
+        const cos = Math.cos(player.angle);
+        const sin = Math.sin(player.angle);
+        const dx = (cos * forward * moveSpeed + Math.cos(player.angle + Math.PI / 2) * strafe * strafeSpeed) * delta;
+        const dy = (sin * forward * moveSpeed + Math.sin(player.angle + Math.PI / 2) * strafe * strafeSpeed) * delta;
+        if (dx || dy) liebiTryMoveEntity(game, player, dx, dy);
+
+        handlePickups();
+        checkExit(now);
+
+        game.damageFlash = Math.max(0, game.damageFlash - delta * 2.8);
+        game.muzzle = Math.max(0, game.muzzle - delta);
+        game.recoil = Math.max(0, game.recoil - delta * 2.4);
+        game.enemies.forEach(enemy => {
+            enemy.hitFlash = Math.max(0, enemy.hitFlash - delta);
+            if (enemy.dead) return;
+
+            const enemyDx = player.x - enemy.x;
+            const enemyDy = player.y - enemy.y;
+            const distance = Math.hypot(enemyDx, enemyDy);
+            const canSee = distance < 8.8 && liebiLineOfSight(game, enemy.x, enemy.y, player.x, player.y);
+            if (canSee) enemy.alert = true;
+            if (!enemy.alert) return;
+
+            if (distance > enemy.attackRange * 0.78) {
+                liebiTryMoveEntity(game, enemy, (enemyDx / distance) * enemy.speed * delta, (enemyDy / distance) * enemy.speed * delta);
+            }
+
+            if (canSee && distance <= enemy.attackRange && now - enemy.lastAttack > enemy.attackDelay) {
+                enemy.lastAttack = now;
+                applyPlayerDamage(enemy.damage, enemy.type === 'ic' ? 'IC SPIKE DETECTED' : (enemy.type === 'drone' ? 'DRONE IMPACT TRAUMA' : 'SECURITY BURST IMPACT'));
+            }
+        });
+    }
+
+    function drawWalls() {
+        const ceilingGradient = ctx.createLinearGradient(0, 0, 0, height / 2);
+        ceilingGradient.addColorStop(0, '#0b1024');
+        ceilingGradient.addColorStop(0.58, '#050713');
+        ceilingGradient.addColorStop(1, '#020402');
+        ctx.fillStyle = ceilingGradient;
+        ctx.fillRect(0, 0, width, height / 2);
+        const floorGradient = ctx.createLinearGradient(0, height / 2, 0, height);
+        floorGradient.addColorStop(0, '#03100c');
+        floorGradient.addColorStop(1, '#000100');
+        ctx.fillStyle = floorGradient;
+        ctx.fillRect(0, height / 2, width, height / 2);
+
+        for (let y = Math.floor(height / 2); y < height; y += 8) {
+            const alpha = (y - height / 2) / (height / 2);
+            ctx.fillStyle = `rgba(32, 194, 14, ${0.025 + alpha * 0.035})`;
+            ctx.fillRect(0, y, width, 1);
+        }
+
+        for (let x = 0; x < width; x++) {
+            const rayAngle = game.player.angle - fov / 2 + (x / width) * fov;
+            const ray = liebiCastRay(game, rayAngle);
+            const corrected = ray.distance * Math.cos(rayAngle - game.player.angle);
+            zBuffer[x] = corrected;
+            const wallHeight = Math.min(height * 1.7, height / corrected);
+            const y = Math.floor(height / 2 - wallHeight / 2);
+            const shade = Math.max(0.15, 1 - corrected / 11) * (ray.side ? 0.74 : 1);
+            const base = ray.tile === 'R' ? [255, 51, 51] : (ray.tile === 'D' ? [255, 176, 0] : [32, 194, 14]);
+            const drawHeight = Math.ceil(wallHeight);
+            const wallTop = y;
+            if (ray.tile === '#' && liebiAssets.ready('wallChip')) {
+                const texture = liebiAssets.images.wallChip;
+                const texX = Math.max(0, Math.min(texture.naturalWidth - 1, Math.floor(ray.wallX * texture.naturalWidth)));
+                ctx.drawImage(texture, texX, 0, 1, texture.naturalHeight, x, wallTop, 1, drawHeight);
+                ctx.fillStyle = `rgba(0, 0, 0, ${Math.max(0, 0.58 - shade * 0.42)})`;
+                ctx.fillRect(x, wallTop, 1, drawHeight);
+                ctx.fillStyle = `rgba(32, 194, 14, ${0.05 * shade})`;
+                ctx.fillRect(x, wallTop, 1, drawHeight);
+            } else {
+                ctx.fillStyle = liebiColor(base, shade);
+                ctx.fillRect(x, wallTop, 1, drawHeight);
+            }
+            if (ray.tile === 'D' || ray.tile === 'R') {
+                const band = Math.floor(ray.wallX * 8) % 2 === 0;
+                ctx.fillStyle = band ? `rgba(0, 0, 0, ${0.25 + (1 - shade) * 0.25})` : `rgba(255, 255, 255, ${0.045 * shade})`;
+                ctx.fillRect(x, wallTop, 1, drawHeight);
+            }
+            if (x % 7 === 0) {
+                ctx.fillStyle = `rgba(0, 212, 170, ${0.08 * shade})`;
+                ctx.fillRect(x, wallTop, 1, drawHeight);
+            }
+        }
+    }
+
+    function drawSpriteFrame(image, sx, sy, sw, sh, dx, dy, dw, dh) {
+        if (!image || !image.naturalWidth || !image.naturalHeight) return false;
+        const sourceX = Math.max(0, Math.min(image.naturalWidth - 1, sx));
+        const sourceY = Math.max(0, Math.min(image.naturalHeight - 1, sy));
+        const sourceW = Math.max(1, Math.min(sw, image.naturalWidth - sourceX));
+        const sourceH = Math.max(1, Math.min(sh, image.naturalHeight - sourceY));
+        ctx.drawImage(image, sourceX, sourceY, sourceW, sourceH, dx, dy, dw, dh);
+        return true;
+    }
+
+    function drawEnemySprite(enemy, screenX, screenY, size, now) {
+        const half = size / 2;
+        const frameSeed = Math.floor(now / 140 + enemy.x * 2 + enemy.y);
+        if ((enemy.type === 'drone' || enemy.type === 'ic') && liebiAssets.ready(enemy.type === 'ic' ? 'enemyD' : 'enemyC')) {
+            const sheetKey = enemy.type === 'ic' ? 'enemyD' : 'enemyC';
+            const sheet = liebiAssets.images[sheetKey];
+            const cols = enemy.type === 'ic' ? 8 : 8;
+            const frameCount = enemy.type === 'ic' ? 8 : 16;
+            const frame = frameSeed % frameCount;
+            const sx = (frame % cols) * 64;
+            const sy = Math.floor(frame / cols) * 64;
+            ctx.save();
+            ctx.globalAlpha = enemy.hitFlash > 0 ? 0.68 : 0.98;
+            if (enemy.hitFlash > 0) {
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(screenX - half * 0.72, screenY - half * 0.72, size * 0.95, size * 0.95);
+            }
+            drawSpriteFrame(sheet, sx, sy, 64, 64, screenX - half, screenY - half, size, size);
+            ctx.restore();
+            return;
+        }
+
+        ctx.save();
+        ctx.translate(screenX, screenY);
+        ctx.globalAlpha = enemy.hitFlash > 0 ? 1 : 0.94;
+        ctx.fillStyle = enemy.hitFlash > 0 ? '#ffffff' : (enemy.type === 'ic' ? '#150016' : (enemy.type === 'guard' ? '#141008' : '#07110b'));
+        ctx.strokeStyle = enemy.type === 'ic' ? '#ff00ff' : (enemy.type === 'guard' ? '#ffb000' : '#ff3333');
+        ctx.lineWidth = Math.max(1, size / 36);
+        if (enemy.type === 'ic') {
+            ctx.beginPath();
+            ctx.moveTo(0, -half);
+            ctx.lineTo(half * 0.75, 0);
+            ctx.lineTo(0, half);
+            ctx.lineTo(-half * 0.75, 0);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = '#ffb000';
+            ctx.fillRect(-size * 0.16, -size * 0.05, size * 0.32, size * 0.1);
+        } else if (enemy.type === 'guard') {
+            ctx.fillRect(-half * 0.34, -half * 0.72, size * 0.68, size * 0.9);
+            ctx.strokeRect(-half * 0.34, -half * 0.72, size * 0.68, size * 0.9);
+            ctx.fillStyle = '#20c20e';
+            ctx.fillRect(-half * 0.22, -half * 0.52, size * 0.44, size * 0.08);
+            ctx.strokeStyle = '#ff3333';
+            ctx.beginPath();
+            ctx.moveTo(half * 0.25, -half * 0.12);
+            ctx.lineTo(half * 0.78, half * 0.08);
+            ctx.stroke();
+        } else {
+            ctx.fillRect(-half * 0.72, -half * 0.55, size * 0.72, size * 0.72);
+            ctx.strokeRect(-half * 0.72, -half * 0.55, size * 0.72, size * 0.72);
+            ctx.fillStyle = '#ff3333';
+            ctx.fillRect(-half * 0.52, -half * 0.31, size * 0.34, size * 0.08);
+            ctx.strokeStyle = '#00d4aa';
+            ctx.beginPath();
+            ctx.moveTo(-half * 0.72, half * 0.05);
+            ctx.lineTo(-half, half * 0.32);
+            ctx.moveTo(0, half * 0.05);
+            ctx.lineTo(half * 0.28, half * 0.32);
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+
+    function drawPickupSprite(pickup, screenX, screenY, size, now) {
+        const pulse = 0.82 + Math.sin(now * 0.004 + pickup.pulse) * 0.18;
+        const drawSize = size * pulse;
+        ctx.save();
+        ctx.translate(screenX, screenY);
+        const pickupColor = {
+            S: '#ffb000',
+            M: '#ff3333',
+            K: '#ff3333',
+            V: '#20c20e',
+            W: '#ffb000',
+            A: '#00d4aa'
+        }[pickup.type] || '#00d4aa';
+        const pickupLabel = {
+            S: 'DATA',
+            M: '+',
+            K: 'KEY',
+            V: 'ARM',
+            W: 'SG',
+            A: 'AMMO'
+        }[pickup.type] || 'ITEM';
+        const sprite = {
+            A: ['pistols', 64, 0, 32, 32],
+            W: ['shotguns', 0, 0, 64, 32],
+            K: ['neonpunk', 0, 0, 32, 32],
+            S: ['neonpunk', 32, 0, 32, 32],
+            V: ['armor', 0, 0, 32, 32],
+            M: ['neonpunk', 64, 0, 32, 32]
+        }[pickup.type];
+        ctx.strokeStyle = pickupColor;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(-drawSize / 2, -drawSize / 2, drawSize, drawSize);
+        ctx.fillRect(-drawSize / 2, -drawSize / 2, drawSize, drawSize);
+        if (sprite && liebiAssets.ready(sprite[0])) {
+            const image = liebiAssets.images[sprite[0]];
+            const [sheetKey, sx, sy, sw, sh] = sprite;
+            const spriteSize = drawSize * (pickup.type === 'W' ? 0.96 : 0.78);
+            drawSpriteFrame(image, sx, sy, sw, sh, -spriteSize / 2, -spriteSize / 2, spriteSize, spriteSize);
+        } else {
+            ctx.fillStyle = ctx.strokeStyle;
+            ctx.font = `${Math.max(8, Math.floor(drawSize * 0.36))}px ${liebiFontFamily}`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(pickupLabel, 0, 0);
+        }
+        ctx.restore();
+    }
+
+    function drawExitSprite(now) {
+        const dx = game.exit.x - game.player.x;
+        const dy = game.exit.y - game.player.y;
+        drawBillboard({ x: game.exit.x, y: game.exit.y }, 0.42, (screenX, screenY, size) => {
+            ctx.save();
+            ctx.translate(screenX, screenY);
+            const exitOpen = game.player.shard && game.player.redKey;
+            ctx.strokeStyle = exitOpen ? '#20c20e' : '#8b6914';
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.58)';
+            ctx.globalAlpha = Math.max(0.55, 0.9 - Math.hypot(dx, dy) * 0.04);
+            ctx.strokeRect(-size / 2, -size / 2, size, size);
+            ctx.fillRect(-size / 2, -size / 2, size, size);
+            ctx.fillStyle = exitOpen ? '#20c20e' : '#ffb000';
+            ctx.font = `${Math.max(7, Math.floor(size * 0.25))}px ${liebiFontFamily}`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(exitOpen ? 'EXIT' : 'LOCK', 0, Math.sin(now * 0.005) * 2);
+            ctx.restore();
+        });
+    }
+
+    function drawBillboard(sprite, sizeScale, drawCallback) {
+        const dx = sprite.x - game.player.x;
+        const dy = sprite.y - game.player.y;
+        const distance = Math.hypot(dx, dy);
+        if (distance < 0.2) return;
+        const angle = normalizeAngle(Math.atan2(dy, dx) - game.player.angle);
+        if (Math.abs(angle) > fov / 2 + 0.25) return;
+        const screenX = (0.5 + angle / fov) * width;
+        const size = Math.min(120, Math.max(8, (height / distance) * sizeScale));
+        const screenY = height / 2 + size * 0.2;
+        const bufferIndex = Math.max(0, Math.min(width - 1, Math.floor(screenX)));
+        if (distance > zBuffer[bufferIndex] + 0.15) return;
+        drawCallback(screenX, screenY, size, distance);
+    }
+
+    function drawSprites(now) {
+        const sprites = [];
+        game.pickups.forEach(pickup => {
+            if (!pickup.taken) sprites.push({ kind: 'pickup', item: pickup, dist: Math.hypot(pickup.x - game.player.x, pickup.y - game.player.y) });
+        });
+        game.enemies.forEach(enemy => {
+            if (!enemy.dead) sprites.push({ kind: 'enemy', item: enemy, dist: Math.hypot(enemy.x - game.player.x, enemy.y - game.player.y) });
+        });
+        sprites.sort((a, b) => b.dist - a.dist);
+        sprites.forEach(sprite => {
+            drawBillboard(sprite.item, sprite.kind === 'enemy' ? 0.76 : 0.36, (screenX, screenY, size) => {
+                if (sprite.kind === 'enemy') drawEnemySprite(sprite.item, screenX, screenY, size, now);
+                else drawPickupSprite(sprite.item, screenX, screenY, size, now);
+            });
+        });
+        drawExitSprite(now);
+    }
+
+    function drawWeapon() {
+        const bob = Math.sin(performance.now() * 0.008) * 1.5 + game.recoil * 12;
+        const shotgun = game.player.weapon === 'shotgun' && game.player.weapons.shotgun;
+        const weaponSheet = shotgun ? 'shotguns' : 'pistols';
+        const weaponImage = liebiAssets.images[weaponSheet];
+        if (liebiAssets.ready(weaponSheet)) {
+            const spriteWidth = shotgun ? 96 : 72;
+            const spriteHeight = shotgun ? 48 : 42;
+            const sx = shotgun ? 0 : 0;
+            const sy = 0;
+            ctx.save();
+            ctx.shadowColor = shotgun ? '#ffb000' : '#20c20e';
+            ctx.shadowBlur = 4;
+            drawSpriteFrame(weaponImage, sx, sy, shotgun ? 96 : 64, 32, width / 2 - spriteWidth / 2, height - spriteHeight - 2 + bob, spriteWidth, spriteHeight);
+            ctx.restore();
+            if (game.muzzle > 0) {
+                ctx.fillStyle = '#ffb000';
+                ctx.beginPath();
+                ctx.moveTo(width / 2 + (shotgun ? 44 : 32), height - spriteHeight + bob);
+                ctx.lineTo(width / 2 + (shotgun ? 68 : 48), height - spriteHeight - 9 + bob);
+                ctx.lineTo(width / 2 + (shotgun ? 57 : 39), height - spriteHeight + 13 + bob);
+                ctx.fill();
+            }
+            return;
+        }
+
+        ctx.fillStyle = '#050505';
+        ctx.fillRect(width / 2 - (shotgun ? 42 : 28), height - 38 + bob, shotgun ? 84 : 56, 38);
+        ctx.strokeStyle = shotgun ? '#ffb000' : '#20c20e';
+        ctx.strokeRect(width / 2 - (shotgun ? 38 : 24), height - 34 + bob, shotgun ? 76 : 48, 30);
+        ctx.fillStyle = '#1a2c1a';
+        ctx.fillRect(width / 2 - (shotgun ? 28 : 14), height - 50 + bob, shotgun ? 56 : 28, 26);
+        ctx.strokeStyle = '#00d4aa';
+        ctx.strokeRect(width / 2 - (shotgun ? 28 : 14), height - 50 + bob, shotgun ? 56 : 28, 26);
+        if (game.muzzle > 0) {
+            ctx.fillStyle = '#ffb000';
+            ctx.beginPath();
+            ctx.moveTo(width / 2, height - 58 + bob);
+            ctx.lineTo(width / 2 - (shotgun ? 28 : 14), height - (shotgun ? 92 : 80) + bob);
+            ctx.lineTo(width / 2 + (shotgun ? 30 : 15), height - (shotgun ? 88 : 77) + bob);
+            ctx.fill();
+        }
+    }
+
+    function drawMinimap() {
+        if (!game.minimap) return;
+        const scale = 4;
+        const ox = 8;
+        const oy = 8;
+        ctx.save();
+        ctx.globalAlpha = 0.84;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.66)';
+        ctx.fillRect(ox - 3, oy - 3, game.map[0].length * scale + 6, game.map.length * scale + 6);
+        for (let y = 0; y < game.map.length; y++) {
+            for (let x = 0; x < game.map[y].length; x++) {
+                const tile = game.map[y][x];
+                if (tile === '#') ctx.fillStyle = '#176d12';
+                else if (tile === 'D') ctx.fillStyle = '#8b6914';
+                else if (tile === 'R') ctx.fillStyle = '#a32020';
+                else if (tile === 'X') ctx.fillStyle = '#00d4aa';
+                else ctx.fillStyle = 'rgba(32,194,14,0.12)';
+                ctx.fillRect(ox + x * scale, oy + y * scale, scale - 1, scale - 1);
+            }
+        }
+        game.enemies.forEach(enemy => {
+            if (enemy.dead) return;
+            ctx.fillStyle = '#ff3333';
+            ctx.fillRect(ox + enemy.x * scale - 1, oy + enemy.y * scale - 1, 2, 2);
+        });
+        ctx.fillStyle = '#ffb000';
+        ctx.beginPath();
+        ctx.arc(ox + game.player.x * scale, oy + game.player.y * scale, 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ffb000';
+        ctx.beginPath();
+        ctx.moveTo(ox + game.player.x * scale, oy + game.player.y * scale);
+        ctx.lineTo(ox + (game.player.x + Math.cos(game.player.angle) * 1.2) * scale, oy + (game.player.y + Math.sin(game.player.angle) * 1.2) * scale);
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    function drawCrosshair() {
+        ctx.save();
+        ctx.strokeStyle = game.player.weapon === 'shotgun' ? 'rgba(255,176,0,0.72)' : 'rgba(32,194,14,0.72)';
+        ctx.lineWidth = 1;
+        const cx = Math.floor(width / 2);
+        const cy = Math.floor(height / 2);
+        ctx.beginPath();
+        ctx.moveTo(cx - 6, cy);
+        ctx.lineTo(cx - 2, cy);
+        ctx.moveTo(cx + 2, cy);
+        ctx.lineTo(cx + 6, cy);
+        ctx.moveTo(cx, cy - 6);
+        ctx.lineTo(cx, cy - 2);
+        ctx.moveTo(cx, cy + 2);
+        ctx.lineTo(cx, cy + 6);
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    function renderGame(now) {
+        drawWalls();
+        drawSprites(now);
+        drawCrosshair();
+        drawWeapon();
+        drawMinimap();
+
+        if (now < game.messageUntil) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.58)';
+            ctx.fillRect(0, 0, width, 16);
+            ctx.fillStyle = '#ffb000';
+            ctx.font = `8px ${liebiFontFamily}`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(game.message, width / 2, 8);
+        }
+
+        if (game.damageFlash > 0) {
+            ctx.fillStyle = `rgba(255, 51, 51, ${Math.min(0.32, game.damageFlash)})`;
+            ctx.fillRect(0, 0, width, height);
+        }
+    }
+
+    function updateHud(force = false) {
+        const player = game.player;
+        const liveEnemies = game.enemies.filter(enemy => !enemy.dead).length;
+        const status = game.won ? 'EXTRACTED' : (game.lost ? 'FLATLINED' : (nowStatus() || 'RUNNING'));
+        const message = performance.now() < game.messageUntil ? game.message : status;
+        const weapon = activeWeaponConfig();
+        const key = `${player.health}|${player.armor}|${player.ammo}|${player.shells}|${player.weapon}|${player.weapons.shotgun}|${player.shard}|${player.redKey}|${player.score}|${player.kills}|${liveEnemies}|${message}|${game.minimap}|${game.won}|${game.lost}`;
+        if (!force && key === hudCache) return;
+        hudCache = key;
+        ui.health.textContent = `${String(player.health).padStart(3, '0')}%`;
+        ui.healthBar.style.transform = `scaleX(${Math.max(0, player.health) / 100})`;
+        ui.armor.textContent = `${String(player.armor).padStart(3, '0')}%`;
+        ui.armorBar.style.transform = `scaleX(${Math.max(0, player.armor) / 100})`;
+        ui.ammo.textContent = `P:${String(player.ammo).padStart(2, '0')} S:${String(player.shells).padStart(2, '0')}`;
+        ui.weapon.textContent = weapon.name;
+        ui.shard.textContent = player.shard ? 'SECURED' : 'MISSING';
+        ui.key.textContent = player.redKey ? 'RED OK' : 'NO KEY';
+        ui.score.textContent = String(player.score).padStart(5, '0');
+        ui.status.textContent = `${message}\nKILLS: ${player.kills}/${game.totalEnemies}  HOSTILES: ${liveEnemies}\nMINIMAP: ${game.minimap ? 'ON' : 'OFF'}`;
+    }
+
+    function nowStatus() {
+        if (!game.player.weapons.shotgun) return 'FIND ARMORY CACHE';
+        if (!game.player.redKey) return 'FIND RED KEYCARD';
+        if (!game.player.shard) return 'RECOVER DATA SHARD';
+        return 'UNLOCK EXIT AND EXTRACT';
+    }
+
+    function gameLoop(timestamp = 0) {
+        if (closed) return;
+        if (document.hidden) {
+            lastTime = timestamp;
+            frameId = requestAnimationFrame(gameLoop);
+            return;
+        }
+
+        const delta = lastTime ? Math.min(0.05, Math.max(0, (timestamp - lastTime) / 1000)) : 0.016;
+        lastTime = timestamp;
+        updateGame(delta, timestamp);
+        renderGame(timestamp);
+        updateHud();
+        frameId = requestAnimationFrame(gameLoop);
+    }
+
+    function handleKeyDown(event) {
+        const key = event.key.toLowerCase();
+        const handled = ['w', 'a', 's', 'd', 'q', 'e', 'f', 'm', '1', '2', 'escape'].includes(key) || event.code === 'Space';
+        if (!handled) return;
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (key === 'escape') {
+            closeLiebiGame();
+            return;
+        }
+        if (key === 'f' && !event.repeat) {
+            useNearby();
+            return;
+        }
+        if (key === 'm' && !event.repeat) {
+            game.minimap = !game.minimap;
+            updateHud(true);
+            return;
+        }
+        if (key === '1' && !event.repeat) {
+            switchWeapon('pistol');
+            return;
+        }
+        if (key === '2' && !event.repeat) {
+            switchWeapon('shotgun');
+            return;
+        }
+        if (event.code === 'Space') {
+            if (!event.repeat) shoot(performance.now());
+            return;
+        }
+        game.keys.add(key);
+    }
+
+    function handleKeyUp(event) {
+        game.keys.delete(event.key.toLowerCase());
+    }
+
+    function cleanup() {
+        if (closed) return;
+        closed = true;
+        if (frameId) cancelAnimationFrame(frameId);
+        document.removeEventListener('keydown', handleKeyDown);
+        document.removeEventListener('keyup', handleKeyUp);
+        ui.close.removeEventListener('click', closeLiebiGame);
+        ui.exit.removeEventListener('click', closeLiebiGame);
+        ui.restart.removeEventListener('click', restart);
+        overlay.remove();
+        liebiGameCleanup = null;
+    }
+
+    function restart() {
+        cleanup();
+        setTimeout(startLiebiGame, 60);
+    }
+
+    liebiGameCleanup = cleanup;
+    ui.close.addEventListener('click', closeLiebiGame);
+    ui.exit.addEventListener('click', closeLiebiGame);
+    ui.restart.addEventListener('click', restart);
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('keyup', handleKeyUp);
+    AudioEngine.bootBeep();
+    setMessage('BLACKSITE BREACH SIMULATION STARTED', 1800);
+    renderGame(performance.now());
+    updateHud(true);
+    frameId = requestAnimationFrame(gameLoop);
 }
 
 // ========================================

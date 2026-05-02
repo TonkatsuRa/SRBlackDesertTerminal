@@ -9,8 +9,7 @@
         local("Px437 IBM ISO8"),
         local("Px437_IBM_ISO8"),
         local("Ac437 IBM DOS ISO8"),
-        local("Mx437 IBM DOS ISO8"),
-        url("https://sources.debian.org/data/main/f/fonts-pc/1.0-2/Px437%20%28TrueType%20-%20DOS%20charset%29/Px437_IBM_ISO8.ttf") format("truetype");
+        local("Mx437 IBM DOS ISO8");
     font-weight: 400;
     font-style: normal;
     font-display: swap;
@@ -618,6 +617,152 @@ body.low-power .glow {
     outline-offset: 3px;
 }
 
+/* ===== DATABASE SELECTOR ===== */
+.database-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 235;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    background:
+        radial-gradient(circle at 50% 20%, rgba(255, 176, 0, 0.08), transparent 34%),
+        rgba(0, 0, 0, 0.88);
+}
+
+.database-modal-panel {
+    width: min(720px, 100%);
+    max-height: calc(var(--viewport-height) - 36px);
+    border: 1px solid var(--amber);
+    background:
+        linear-gradient(90deg, rgba(255, 176, 0, 0.04), transparent 28%),
+        rgba(3, 12, 5, 0.98);
+    box-shadow:
+        inset 0 0 40px rgba(32, 194, 14, 0.06),
+        0 0 42px rgba(255, 176, 0, 0.13);
+    overflow: hidden;
+}
+
+.database-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(255, 176, 0, 0.35);
+    background: rgba(0, 16, 0, 0.48);
+}
+
+.database-modal-title {
+    color: var(--amber);
+    font-size: var(--font-size-title);
+    letter-spacing: 2px;
+}
+
+.database-modal-close,
+.database-modal-action {
+    border: 1px solid rgba(255, 176, 0, 0.5);
+    background: rgba(20, 12, 0, 0.78);
+    color: var(--amber);
+    font-family: var(--terminal-font);
+    font-size: var(--font-size-small);
+    padding: 8px 11px;
+    min-height: 38px;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+.database-modal-close:focus-visible,
+.database-modal-action:focus-visible,
+.database-choice:focus-visible,
+.database-password-input:focus-visible {
+    outline: 2px solid var(--amber);
+    outline-offset: 3px;
+}
+
+.database-modal-body {
+    padding: 14px;
+    overflow: auto;
+    max-height: calc(var(--viewport-height) - 120px);
+}
+
+.database-modal-copy {
+    color: var(--phosphor);
+    font-size: var(--font-size-small);
+    margin-bottom: 12px;
+}
+
+.database-list {
+    display: grid;
+    gap: 8px;
+}
+
+.database-choice {
+    appearance: none;
+    width: 100%;
+    border: 1px solid rgba(32, 194, 14, 0.28);
+    background:
+        linear-gradient(90deg, rgba(32, 194, 14, 0.08), transparent),
+        rgba(0, 10, 0, 0.66);
+    color: var(--phosphor);
+    font-family: var(--terminal-font);
+    text-align: left;
+    padding: 10px 12px;
+    cursor: pointer;
+}
+
+.database-choice:hover {
+    border-color: var(--cyan);
+    background-color: rgba(0, 30, 20, 0.72);
+}
+
+.database-choice-name,
+.database-choice-description {
+    display: block;
+}
+
+.database-choice-name {
+    color: var(--cyan);
+    font-size: var(--font-size-base);
+    margin-bottom: 4px;
+}
+
+.database-choice-description {
+    color: #777;
+    font-size: var(--font-size-small);
+}
+
+.database-password-input {
+    width: 100%;
+    border: 1px solid var(--phosphor-dim);
+    background: rgba(0, 20, 0, 0.8);
+    color: var(--phosphor);
+    font-family: var(--terminal-font);
+    font-size: var(--font-size-base);
+    padding: 11px 12px;
+    margin-bottom: 10px;
+}
+
+.database-password-error {
+    color: var(--red);
+    min-height: 1.3em;
+    font-size: var(--font-size-small);
+    margin-bottom: 10px;
+}
+
+.database-modal-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.database-modal-action.secondary {
+    border-color: rgba(32, 194, 14, 0.35);
+    color: var(--phosphor);
+    background: rgba(0, 24, 0, 0.72);
+}
+
 /* ===== DIAGNOSTIC DASHBOARD ===== */
 .diagnostic-overlay {
     display: none;
@@ -1174,6 +1319,243 @@ html.has-gsap .boot-output {
 @media (max-width: 900px) {
     .boot-left {
         height: 100%;
+    }
+}
+
+/* ===== HIDDEN RAYCAST MINI-GAME ===== */
+.liebi-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 540;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: max(14px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+    background:
+        radial-gradient(circle at 50% 20%, rgba(0, 212, 170, 0.12), transparent 34%),
+        linear-gradient(180deg, rgba(0, 0, 0, 0.94), rgba(1, 7, 5, 0.98));
+    color: var(--phosphor);
+    font-family: var(--terminal-font);
+}
+
+.liebi-shell {
+    width: min(1080px, 100%);
+    max-height: calc(var(--viewport-height) - 28px);
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: 10px;
+    border: 1px solid rgba(0, 212, 170, 0.62);
+    background:
+        linear-gradient(90deg, rgba(0, 212, 170, 0.05), transparent 28%),
+        rgba(1, 9, 7, 0.96);
+    box-shadow:
+        inset 0 0 46px rgba(0, 212, 170, 0.08),
+        0 0 48px rgba(0, 0, 0, 0.7);
+    padding: 10px;
+    overflow: hidden;
+}
+
+.liebi-topbar,
+.liebi-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
+}
+
+.liebi-title {
+    color: var(--amber);
+    letter-spacing: 2px;
+    font-size: var(--font-size-title);
+    white-space: nowrap;
+}
+
+.liebi-objective,
+.liebi-controls {
+    color: var(--cyan);
+    font-size: var(--font-size-small);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.liebi-close {
+    flex-shrink: 0;
+    border: 1px solid rgba(255, 176, 0, 0.58);
+    background: rgba(20, 12, 0, 0.82);
+    color: var(--amber);
+    font-family: var(--terminal-font);
+    font-size: var(--font-size-small);
+    padding: 8px 11px;
+    min-height: 38px;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+.liebi-close:focus-visible,
+.liebi-action:focus-visible {
+    outline: 2px solid var(--amber);
+    outline-offset: 3px;
+}
+
+.liebi-stage {
+    position: relative;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(190px, 240px);
+    gap: 10px;
+}
+
+.liebi-canvas-wrap {
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(32, 194, 14, 0.28);
+    background:
+        repeating-linear-gradient(0deg, rgba(32, 194, 14, 0.035), rgba(32, 194, 14, 0.035) 1px, transparent 1px, transparent 4px),
+        #000;
+    overflow: hidden;
+}
+
+#liebiCanvas {
+    width: min(100%, calc((var(--viewport-height) - 180px) * 1.64));
+    max-height: calc(var(--viewport-height) - 180px);
+    aspect-ratio: 18 / 11;
+    display: block;
+    background: #000;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+}
+
+.liebi-hud {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    align-content: start;
+}
+
+.liebi-panel {
+    border: 1px solid rgba(32, 194, 14, 0.24);
+    background: rgba(0, 12, 6, 0.72);
+    padding: 8px;
+    min-width: 0;
+}
+
+.liebi-panel.wide {
+    grid-column: 1 / -1;
+}
+
+.liebi-label {
+    color: var(--amber);
+    font-size: var(--font-size-tiny);
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+}
+
+.liebi-value {
+    color: var(--phosphor);
+    font-size: var(--font-size-small);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.liebi-bar {
+    height: 8px;
+    border: 1px solid rgba(32, 194, 14, 0.35);
+    background: rgba(0, 0, 0, 0.55);
+    overflow: hidden;
+}
+
+.liebi-bar-fill {
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(90deg, var(--red), var(--amber), var(--phosphor));
+    transform-origin: left center;
+}
+
+.liebi-modal {
+    position: absolute;
+    inset: 0;
+    display: none;
+    place-items: center;
+    background: rgba(0, 0, 0, 0.72);
+    text-align: center;
+    padding: 18px;
+}
+
+.liebi-modal.active {
+    display: grid;
+}
+
+.liebi-modal-card {
+    width: min(420px, 100%);
+    border: 1px solid var(--amber);
+    background: rgba(2, 9, 5, 0.96);
+    padding: 20px;
+    box-shadow: 0 0 30px rgba(255, 176, 0, 0.16);
+}
+
+.liebi-modal-title {
+    color: var(--amber);
+    font-size: var(--font-size-title);
+    margin-bottom: 10px;
+}
+
+.liebi-modal-text {
+    color: var(--phosphor);
+    font-size: var(--font-size-small);
+    margin-bottom: 16px;
+}
+
+.liebi-actions {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.liebi-action {
+    border: 1px solid rgba(32, 194, 14, 0.5);
+    background: rgba(0, 28, 0, 0.86);
+    color: var(--phosphor);
+    font-family: var(--terminal-font);
+    padding: 9px 14px;
+    min-height: 38px;
+    cursor: pointer;
+}
+
+.liebi-action.secondary {
+    border-color: rgba(255, 176, 0, 0.48);
+    color: var(--amber);
+    background: rgba(20, 12, 0, 0.78);
+}
+
+@media (max-width: 760px) {
+    .liebi-shell {
+        max-height: calc(var(--viewport-height) - 20px);
+    }
+
+    .liebi-topbar,
+    .liebi-footer {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .liebi-stage {
+        grid-template-columns: 1fr;
+        overflow: auto;
+    }
+
+    #liebiCanvas {
+        width: 100%;
+        max-height: 52vh;
+    }
+
+    .liebi-hud {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 }
 
