@@ -1603,6 +1603,88 @@ function addPageBreakToBuffer() {
     scheduleBufferRecalculate();
 }
 
+function remainingOutputPageLines() {
+    const remainder = outputBuffer.length % linesPerPage;
+    return remainder === 0 ? linesPerPage : linesPerPage - remainder;
+}
+
+function addOutputGroup(lines) {
+    const group = lines.filter(line => line && typeof line.text === 'string');
+    if (!group.length) return;
+    if (group.length > linesPerPage && isHelpHeadingLine(group[0].text, group[0].className)) {
+        addLongHelpGroup(group);
+        return;
+    }
+    if (outputBuffer.length && group.length <= linesPerPage && group.length > remainingOutputPageLines()) {
+        addPageBreakToBuffer();
+    }
+    group.forEach(line => {
+        outputBuffer.push({ text: line.text, className: line.className || '' });
+    });
+    scheduleBufferRecalculate();
+}
+
+function addLongHelpGroup(group) {
+    const heading = group[0];
+    const remaining = group.slice(1);
+    let capacity = remainingOutputPageLines();
+
+    if (outputBuffer.length && capacity < 2) {
+        addPageBreakToBuffer();
+        capacity = linesPerPage;
+    }
+
+    outputBuffer.push({ text: heading.text, className: heading.className || '' });
+    let firstBodyCount = Math.max(0, capacity - 1);
+    while (firstBodyCount > 0 && remaining.length) {
+        const line = remaining.shift();
+        outputBuffer.push({ text: line.text, className: line.className || '' });
+        firstBodyCount--;
+    }
+
+    while (remaining.length) {
+        addPageBreakToBuffer();
+        outputBuffer.push({ text: heading.text, className: heading.className || '' });
+        let bodyCount = Math.max(1, linesPerPage - 1);
+        while (bodyCount > 0 && remaining.length) {
+            const line = remaining.shift();
+            outputBuffer.push({ text: line.text, className: line.className || '' });
+            bodyCount--;
+        }
+    }
+
+    scheduleBufferRecalculate();
+}
+
+function isHelpHeadingLine(text, className = '') {
+    if (!String(text || '').trim()) return false;
+    const classes = String(className || '').split(/\s+/);
+    return classes.includes('t-cyan') || classes.includes('t-red');
+}
+
+function renderHelpLinesGrouped(lines) {
+    let group = [];
+
+    function flushGroup() {
+        if (!group.length) return;
+        addOutputGroup(group);
+        group = [];
+    }
+
+    lines.forEach(line => {
+        if (isOutputPageBreak(line.text)) {
+            flushGroup();
+            addPageBreakToBuffer();
+            return;
+        }
+        if (isHelpHeadingLine(line.text, line.className) && group.length) {
+            flushGroup();
+        }
+        group.push(line);
+    });
+    flushGroup();
+}
+
 function scheduleBufferRecalculate() {
     if (bufferRecalcPending) return;
     bufferRecalcPending = true;
@@ -2078,69 +2160,68 @@ function showHelp() {
     clearOutput();
     const customHelp = contentLines('help', []);
     if (customHelp.length) {
-        customHelp.forEach((line, index) => {
-            if (isOutputPageBreak(line)) {
-                addPageBreakToBuffer();
-                return;
-            }
-            print(line, contentClass('help', index, ''));
-        });
+        renderHelpLinesGrouped(customHelp.map((line, index) => ({
+            text: line,
+            className: contentClass('help', index, '')
+        })));
         return;
     }
-    print('═══════════════════════════════════════════════════════', 't-dim');
-    print('                    SYSTEM MANUAL', 't-bright');
-    print('═══════════════════════════════════════════════════════', 't-dim');
-    print('');
-    print('ACCESS', 't-cyan');
-    print('  Request elevated administrator privileges.');
-    print('');
-    print('CATEGORIES', 't-cyan');
-    print('  Displays all available categories and visible entry counts.');
-    print('');
-    print('CLEAR', 't-cyan');
-    print('  Clears the display area. Loaded data remains active.');
-    print('');
-    print('DIAGNOSTIC', 't-cyan');
-    print('  Opens current base diagnostic dashboard.');
-    print('');
-    print('EJECT ALL DATABASE', 't-cyan');
-    print('  Ejects every mounted database package.');
-    print('');
-    print('EJECT DATABASE SLOT 1 / 2 / 3', 't-cyan');
-    print('  Ejects one mounted database slot so another package can be loaded.');
-    print('');
-    print('FACILITY STATUS', 't-cyan');
-    print('  Opens abstract wireframe overview of facility zones.');
-    print('');
-    print('LOAD DATABASE', 't-cyan');
-    print('  Opens the database selector. Up to three packages can be mounted.');
-    print('');
-    print('LOAD FILE', 't-cyan');
-    print('  Opens a local .md, .txt, or .dat database file.');
-    print('');
-    print('SEARCH', 't-cyan');
-    print('  Query database by exact entry title or entry id.');
-    print('');
-    print('SOUND ON / SOUND OFF', 't-cyan');
-    print('  Toggles optional terminal audio.');
-    print('');
-    print('STATUS FORMAT', 't-cyan');
-    print('  Prints the editable status profile file format.');
-    print('');
-    print('WELCOME', 't-cyan');
-    print('  Displays the corporate welcome notice.');
-    print('');
-    addPageBreakToBuffer();
-    print('───────────────────────────────────────────────────────', 't-dim');
-    print('ADMIN COMMANDS (requires ACCESS)', 't-red');
-    print('───────────────────────────────────────────────────────', 't-dim');
-    print('FUZZY SEARCH - Partial match in title or content.', 't-red');
-    print('LIST ALL - Complete index including confidential entries.', 't-red');
-    print('LOAD STATUS / STATUS LOAD - Load profile; restarts terminal.', 't-red');
-    print('LOGOUT - Terminate administrator session.', 't-red');
-    print('STATUS CLEAR - Restore default facility data.', 't-red');
-    print('Navigation: ↑↓ Menu | ←→ Pages | Enter Select', 't-dim');
-    print('═══════════════════════════════════════════════════════', 't-dim');
+    renderHelpLinesGrouped([
+        { text: '═══════════════════════════════════════════════════════', className: 't-dim' },
+        { text: '                    SYSTEM MANUAL', className: 't-bright' },
+        { text: '═══════════════════════════════════════════════════════', className: 't-dim' },
+        { text: '', className: '' },
+        { text: 'ACCESS', className: 't-cyan' },
+        { text: '  Request elevated administrator privileges.', className: '' },
+        { text: '', className: '' },
+        { text: 'CATEGORIES', className: 't-cyan' },
+        { text: '  Displays all available categories and visible entry counts.', className: '' },
+        { text: '', className: '' },
+        { text: 'CLEAR', className: 't-cyan' },
+        { text: '  Clears the display area. Loaded data remains active.', className: '' },
+        { text: '', className: '' },
+        { text: 'DIAGNOSTIC', className: 't-cyan' },
+        { text: '  Opens current base diagnostic dashboard.', className: '' },
+        { text: '', className: '' },
+        { text: 'EJECT ALL DATABASE', className: 't-cyan' },
+        { text: '  Ejects every mounted database package.', className: '' },
+        { text: '', className: '' },
+        { text: 'EJECT DATABASE SLOT 1 / 2 / 3', className: 't-cyan' },
+        { text: '  Ejects one mounted database slot so another package can be loaded.', className: '' },
+        { text: '', className: '' },
+        { text: 'FACILITY STATUS', className: 't-cyan' },
+        { text: '  Opens abstract wireframe overview of facility zones.', className: '' },
+        { text: '', className: '' },
+        { text: 'LOAD DATABASE', className: 't-cyan' },
+        { text: '  Opens the database selector. Up to three packages can be mounted.', className: '' },
+        { text: '', className: '' },
+        { text: 'LOAD FILE', className: 't-cyan' },
+        { text: '  Opens a local .md, .txt, or .dat database file.', className: '' },
+        { text: '', className: '' },
+        { text: 'SEARCH', className: 't-cyan' },
+        { text: '  Query database by exact entry title or entry id.', className: '' },
+        { text: '', className: '' },
+        { text: 'SOUND ON / SOUND OFF', className: 't-cyan' },
+        { text: '  Toggles optional terminal audio.', className: '' },
+        { text: '', className: '' },
+        { text: 'STATUS FORMAT', className: 't-cyan' },
+        { text: '  Prints the editable status profile file format.', className: '' },
+        { text: '', className: '' },
+        { text: 'WELCOME', className: 't-cyan' },
+        { text: '  Displays the corporate welcome notice.', className: '' },
+        { text: '', className: '' },
+        { text: '@pagebreak', className: '' },
+        { text: '───────────────────────────────────────────────────────', className: 't-dim' },
+        { text: 'ADMIN COMMANDS (requires ACCESS)', className: 't-red' },
+        { text: '───────────────────────────────────────────────────────', className: 't-dim' },
+        { text: 'FUZZY SEARCH - Partial match in title or content.', className: 't-red' },
+        { text: 'LIST ALL - Complete index including confidential entries.', className: 't-red' },
+        { text: 'LOAD STATUS / STATUS LOAD - Load profile; restarts terminal.', className: 't-red' },
+        { text: 'LOGOUT - Terminate administrator session.', className: 't-red' },
+        { text: 'STATUS CLEAR - Restore default facility data.', className: 't-red' },
+        { text: 'Navigation: ↑↓ Menu | ←→ Pages | Enter Select', className: 't-dim' },
+        { text: '═══════════════════════════════════════════════════════', className: 't-dim' }
+    ]);
 }
 
 function showCategories() {
