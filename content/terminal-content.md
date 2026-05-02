@@ -62,22 +62,24 @@ soundOff = SOUND OFF
 
 @amber WELCOME, AUTHORIZED PERSONNEL ASSET.
 
-@amber This system provides controlled access to facility database, diagnostic, logistics, and operational status functions. 
 @amber All activity is monitored for security, compliance, and performance optimization.
+@amber Report all anomalies before they escalate into liabilities. Unreported incidents will be interpreted as negligence and disloyalty.
 
-@amber Report all anomalies before they escalate into liabilities. Unreported incidents will be interpreted as negligence and as disloyalty.
-
-@amber Ares values dedication, discretion, and efficient replacement.
 @amber Rest periods are authorized only when they preserve long-term output. Emotional distress should be logged through the appropriate channel and resolved without impact to mission deliverables.
 
-@amber Remember:
-@amber Compliance is productivity. Productivity is margin.
-@amber Margin is confidence. Confidence is continuity.
+@red Great companies are built by people who understand that
+@red purpose begins where personal comfort ends.
 
-@red In unity, there is efficiency.
-@red In efficiency, there is profit.
-@red In profit, there is purpose.
-@red You are not merely an employee. You are an operational asset entrusted with shareholder confidence.
+@red Every task completed, every break shortened, every concern set aside
+@red moves us closer to a stronger, leaner, more confident future.
+
+@red Your work creates value.
+@red Your value creates trust.
+@red Your trust sustains the shareholders who sustain the mission.
+
+@red Together, we do not merely work.
+
+@red We deliver tomorrow.
 
 @bright WELCOME BACK.
 @bright RESUME YOUR FUNCTION IMMEDIATELY.
