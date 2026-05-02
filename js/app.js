@@ -240,7 +240,7 @@ const AudioEngine = {
     initialized: false,
     usingHowler: false,
     masterVolume: 1,
-    outputBoost: 1.5,
+    outputBoost: 2,
     lastToneAt: {},
     pendingStartupJingle: false,
     startupJinglePlayed: false,
