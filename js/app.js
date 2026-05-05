@@ -8,8 +8,11 @@ let prefersReducedMotion = reducedMotionQuery.matches;
 let MOTION_SCALE = prefersReducedMotion ? 0.25 : 1;
 let mediaPreferenceHandlersBound = false;
 const TYPEWRITER_CONFIG = {
-    charsPerSecond: prefersReducedMotion ? 99999 : 360,
-    maxCharsPerFrame: prefersReducedMotion ? 99999 : 4,
+    charInterval: prefersReducedMotion ? 0 : 9,
+    bootCharInterval: prefersReducedMotion ? 0 : 22,
+    terminalCharsPerSecond: prefersReducedMotion ? 0 : 180,
+    terminalMaxCharsPerFrame: prefersReducedMotion ? 1 : 3,
+    terminalKeyClickMs: 70,
     lineDelay: prefersReducedMotion ? 0 : 0
 };
 
@@ -21,16 +24,96 @@ function syncLowPowerMode() {
 function applyMotionPreference(matches = reducedMotionQuery.matches) {
     prefersReducedMotion = Boolean(matches);
     MOTION_SCALE = prefersReducedMotion ? 0.25 : 1;
-    TYPEWRITER_CONFIG.charsPerSecond = prefersReducedMotion ? 99999 : 360;
-    TYPEWRITER_CONFIG.maxCharsPerFrame = prefersReducedMotion ? 99999 : 4;
+    TYPEWRITER_CONFIG.charInterval = prefersReducedMotion ? 0 : 9;
+    TYPEWRITER_CONFIG.bootCharInterval = prefersReducedMotion ? 0 : 22;
+    TYPEWRITER_CONFIG.terminalCharsPerSecond = prefersReducedMotion ? 0 : 180;
+    TYPEWRITER_CONFIG.terminalMaxCharsPerFrame = prefersReducedMotion ? 1 : 3;
     TYPEWRITER_CONFIG.lineDelay = prefersReducedMotion ? 0 : 0;
     syncLowPowerMode();
+    setTerminalTypingState(typeof isTyping === 'boolean' ? isTyping : false);
 
     if (prefersReducedMotion) {
         pauseRealtimePanels();
     } else {
         resumeRealtimePanels();
     }
+}
+
+function typeTextSmooth(element, text, options = {}) {
+    const value = String(text ?? '');
+    const activeClass = options.activeClass || 'terminal-typewriter-active';
+    const interval = Math.max(1, Number(options.interval ?? TYPEWRITER_CONFIG.charInterval));
+    const charsPerSecond = Math.max(0, Number(options.charsPerSecond || 0));
+    const maxCharsPerFrame = Math.max(1, Number(options.maxCharsPerFrame || 1));
+    const shouldCancel = typeof options.shouldCancel === 'function' ? options.shouldCancel : () => false;
+    const onFrame = typeof options.onFrame === 'function' ? options.onFrame : null;
+    const onChar = typeof options.onChar === 'function' ? options.onChar : null;
+
+    if (!element) return Promise.resolve({ completed: false, cancelled: true });
+    element.textContent = '';
+    const textNode = document.createTextNode('');
+    element.appendChild(textNode);
+
+    if (prefersReducedMotion || !value) {
+        textNode.data = value;
+        element.classList.remove(activeClass);
+        return Promise.resolve({ completed: true, cancelled: false });
+    }
+
+    element.classList.add(activeClass);
+    let index = 0;
+    let lastStepTime = 0;
+    let charBudget = 0;
+
+    return new Promise(resolve => {
+        const finish = (cancelled = false) => {
+            element.classList.remove(activeClass);
+            if (onFrame) onFrame(null);
+            resolve({ completed: !cancelled, cancelled });
+        };
+
+        const tick = (timestamp = 0) => {
+            if (shouldCancel()) {
+                finish(true);
+                return;
+            }
+
+            if (!lastStepTime) lastStepTime = timestamp;
+            const elapsed = Math.min(50, Math.max(0, timestamp - lastStepTime));
+            let charsThisFrame = 0;
+
+            if (charsPerSecond > 0) {
+                charBudget += (elapsed * charsPerSecond) / 1000;
+                charsThisFrame = Math.min(maxCharsPerFrame, value.length - index, Math.floor(charBudget));
+                if (charsThisFrame > 0) charBudget -= charsThisFrame;
+                lastStepTime = timestamp;
+            } else if (timestamp - lastStepTime >= interval) {
+                charsThisFrame = 1;
+                lastStepTime = timestamp;
+            }
+
+            if (charsThisFrame > 0) {
+                const startIndex = index;
+                index = Math.min(value.length, index + charsThisFrame);
+                textNode.data = value.slice(0, index);
+                if (onChar) {
+                    for (let i = startIndex; i < index; i++) {
+                        onChar(i + 1, value.charAt(i));
+                    }
+                }
+            }
+
+            if (index < value.length) {
+                const frame = requestAnimationFrame(tick);
+                if (onFrame) onFrame(frame);
+            } else {
+                finish(false);
+            }
+        };
+
+        const frame = requestAnimationFrame(tick);
+        if (onFrame) onFrame(frame);
+    });
 }
 
 function bindMediaQueryChange(query, handler) {
@@ -162,7 +245,7 @@ const Animator = {
         if (!this.canAnimate()) return;
         const gsap = this.getGsap();
         const tl = gsap.timeline();
-        const targets = ['.screen-content', '.header-panel', '.hologram-panel', '.menu-panel', '.content-panel'];
+        const targets = ['.screen-content', '.header-panel', '.hologram-panel', '.menu-panel', '.content-panel', '.system-sidebar', '.command-bar'];
         this.promote(targets);
         tl.from('.screen-content', { opacity: 0, scale: 0.988, duration: 0.35, ease: 'power2.out' });
         tl.from(['.header-panel', '.hologram-panel'], { opacity: 0, y: -8, duration: 0.26, stagger: 0.05, ease: 'power2.out' }, '-=0.18');
@@ -655,14 +738,6 @@ const FALLBACK_DATABASE_MANIFEST = [
         file: 'database6.md'
     }
 ];
-const queueTask = callback => {
-    if (window.queueMicrotask) {
-        window.queueMicrotask(callback);
-    } else {
-        Promise.resolve().then(callback);
-    }
-};
-
 // Menu state
 let selectedMenuIndex = 0;
 let renderedMenuIndex = -1;
@@ -671,6 +746,7 @@ let menuFocused = true;
 let terminalKeyHandlerBound = false;
 let menuHandlersBound = false;
 let accessDialogReturnFocus = null;
+let shellTelemetryTimer = null;
 
 // Pagination
 let outputBuffer = [];
@@ -680,6 +756,7 @@ let linesPerPage = 15;
 let totalPages = 1;
 let resizeFrame = null;
 let hologramStarted = false;
+let hologramStartTimer = null;
 let diagnosticActive = false;
 let diagnosticFrame = 0;
 let diagnosticAnimFrame = null;
@@ -856,7 +933,7 @@ document.addEventListener('DOMContentLoaded', () => {
             calculateLinesPerPage();
             recalculatePages();
             if (!hologramStarted && document.body.classList.contains('terminal-ready')) {
-                initHologram();
+                scheduleHologramStart(200);
             }
             if (facilityActive) {
                 renderFacilityStatus(performance.now());
@@ -1111,50 +1188,14 @@ function bootStatusClass(status) {
     }
 
     function typeBootText(element, text, options = {}) {
-        element.textContent = '';
-        if (prefersReducedMotion || !text) {
-            element.textContent = text;
-            return Promise.resolve();
-        }
-
-        const charsPerSecond = options.charsPerSecond || 180;
-        let index = 0;
-        let lastTime = 0;
-        let budget = 0;
-        element.classList.add('boot-caret');
-
-        return new Promise(resolve => {
-            function tick(timestamp = 0) {
-                if (bootComplete) {
-                    element.classList.remove('boot-caret');
-                    resolve();
-                    return;
-                }
-
-                if (!lastTime) lastTime = timestamp;
-                const elapsed = Math.min(34, Math.max(0, timestamp - lastTime));
-                lastTime = timestamp;
-                budget += (elapsed / 1000) * charsPerSecond;
-
-                if (budget >= 1) {
-                    const charsThisFrame = Math.max(1, Math.min(3, Math.floor(budget)));
-                    const nextIndex = Math.min(text.length, index + charsThisFrame);
-                    element.textContent += text.substring(index, nextIndex);
-                    index = nextIndex;
-                    budget = Math.max(0, budget - charsThisFrame);
-                    if (index % 12 === 0) AudioEngine.keyClick();
-                    scrollBoot();
-                }
-
-                if (index < text.length) {
-                    requestAnimationFrame(tick);
-                } else {
-                    element.classList.remove('boot-caret');
-                    resolve();
-                }
+        element.classList.add('terminal-typewriter-line');
+        return typeTextSmooth(element, text, {
+            interval: options.interval || TYPEWRITER_CONFIG.bootCharInterval,
+            shouldCancel: () => bootComplete,
+            onChar: index => {
+                if (index % 12 === 0) AudioEngine.keyClick();
+                scrollBoot();
             }
-
-            requestAnimationFrame(tick);
         });
     }
 
@@ -1163,7 +1204,7 @@ function bootStatusClass(status) {
         const label = document.createElement('span');
         label.className = 'boot-label';
         line.appendChild(label);
-        await typeBootText(label, text, { charsPerSecond: 220 });
+        await typeBootText(label, text);
     }
 
     async function renderBootCheck(step) {
@@ -1178,15 +1219,19 @@ function bootStatusClass(status) {
         await typeBootText(label, formatCheckLabel(step.label));
         if (bootComplete) return;
 
-        status.textContent = '[CHECK]';
-        status.classList.add('visible');
-        AudioEngine.keyClick();
         const severity = bootStatusSeverity(step.status);
-        await sleep(severity === 'fail' ? 150 : 70);
+        if (severity !== 'ok') {
+            await renderBootStatusSpinner(status, severity === 'fail' ? 1800 : 1200);
+        } else {
+            await sleep(45);
+        }
         if (bootComplete) return;
 
-        status.className = `boot-status visible ${bootStatusClass(step.status)}`;
+        status.className = `boot-status ${bootStatusClass(step.status)}`;
         status.textContent = `[${displayBootResult(step.result)}]`;
+        requestAnimationFrame(() => {
+            if (!bootComplete) status.classList.add('visible');
+        });
         if (severity === 'fail') {
             AudioEngine.errorBuzz();
         } else if (severity === 'warn') {
@@ -1195,6 +1240,33 @@ function bootStatusClass(status) {
             AudioEngine.bootBeep();
         }
         await sleep(step.final ? 240 : 50);
+    }
+
+    function renderBootStatusSpinner(status, duration = 1400) {
+        const spinner = ['/', '-', '\\', '|'];
+        const start = performance.now();
+        status.className = 'boot-status visible t-amber';
+        AudioEngine.keyClick();
+
+        return new Promise(resolve => {
+            function tick(now = performance.now()) {
+                if (bootComplete) {
+                    resolve();
+                    return;
+                }
+
+                const elapsed = now - start;
+                status.textContent = `[${spinner[Math.floor(elapsed / 95) % spinner.length]}]`;
+                if (elapsed >= duration) {
+                    status.classList.remove('visible');
+                    requestAnimationFrame(resolve);
+                    return;
+                }
+                requestAnimationFrame(tick);
+            }
+
+            requestAnimationFrame(tick);
+        });
     }
 
     async function renderBootLoadingBar(duration = 10000) {
@@ -1363,16 +1435,19 @@ function bootStatusClass(status) {
 // ========================================
 // TERMINAL INIT
 // ========================================
+function scheduleHologramStart(delay = 0) {
+    if (hologramStarted || hologramStartTimer) return;
+    hologramStartTimer = setTimeout(() => {
+        hologramStartTimer = null;
+        requestAnimationFrame(() => initHologram());
+    }, Math.max(0, delay));
+}
+
 function initTerminal() {
     showWelcome();
     updateMenuSelection();
     updateDatabaseSlotIndicators();
-    const startHologram = () => initHologram();
-    if (window.requestIdleCallback && !prefersReducedMotion) {
-        window.requestIdleCallback(startHologram, { timeout: 900 });
-    } else {
-        setTimeout(startHologram, prefersReducedMotion ? 0 : 450);
-    }
+    startShellTelemetry();
     
     if (!terminalKeyHandlerBound) {
         document.addEventListener('keydown', handleGlobalKeydown);
@@ -1394,8 +1469,53 @@ function initTerminal() {
                 showDatabaseSlotDialog(slotIndex);
             });
         });
+        document.querySelectorAll('[data-panel-cmd]').forEach(button => {
+            button.addEventListener('click', () => {
+                AudioEngine.menuSelect();
+                const command = button.dataset.panelCmd || '';
+                if (command === 'diagnostic') {
+                    showDiagnosticDashboard();
+                } else if (command === 'facility') {
+                    showFacilityStatus();
+                }
+            });
+        });
+        const executeButton = document.getElementById('commandExecuteBtn');
+        if (executeButton) {
+            executeButton.addEventListener('click', submitCommandInput);
+        }
         menuHandlersBound = true;
     }
+}
+
+function submitCommandInput() {
+    const input = document.getElementById('commandInput');
+    if (!input) return;
+    const value = input.value.trim();
+    if (!value) {
+        input.focus();
+        return;
+    }
+    processCommand(value);
+    input.value = '';
+    menuFocused = true;
+    input.blur();
+}
+
+function updateShellTelemetry() {
+    const now = new Date();
+    const time = document.getElementById('shellSystemTime');
+    const pad = value => String(value).padStart(2, '0');
+    const inWorldYear = 2084;
+    if (time) {
+        time.textContent = `${inWorldYear}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}  ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+    }
+}
+
+function startShellTelemetry() {
+    updateShellTelemetry();
+    if (shellTelemetryTimer) return;
+    shellTelemetryTimer = setInterval(updateShellTelemetry, 1000);
 }
 
 function handleGlobalKeydown(e) {
@@ -1445,7 +1565,6 @@ function handleGlobalKeydown(e) {
     }
     
     const input = document.getElementById('commandInput');
-    
     // If typing in input
     if (document.activeElement === input) {
         if (e.key === 'Enter') {
@@ -1612,7 +1731,16 @@ let typewriterRunId = 0;
 let outputRenderFrame = null;
 let typewriterFrame = null;
 let bufferRecalcPending = false;
+let bufferRecalcFrame = null;
 let outputGroupCounter = 0;
+let lastTypewriterClickAt = 0;
+
+function setTerminalTypingState(active) {
+    isTyping = Boolean(active);
+    if (document.body) {
+        document.body.classList.toggle('terminal-typing', isTyping && !prefersReducedMotion);
+    }
+}
 
 function addToBuffer(text, className = '') {
     const lines = text.split('\n');
@@ -1673,7 +1801,8 @@ function renderHelpLinesGrouped(lines) {
 function scheduleBufferRecalculate() {
     if (bufferRecalcPending) return;
     bufferRecalcPending = true;
-    queueTask(() => {
+    bufferRecalcFrame = requestAnimationFrame(() => {
+        bufferRecalcFrame = null;
         bufferRecalcPending = false;
         recalculatePages();
     });
@@ -1775,6 +1904,10 @@ function clearOutput() {
         cancelAnimationFrame(typewriterFrame);
         typewriterFrame = null;
     }
+    if (bufferRecalcFrame) {
+        cancelAnimationFrame(bufferRecalcFrame);
+        bufferRecalcFrame = null;
+    }
     outputBuffer = [];
     outputPages = [[]];
     currentPage = 0;
@@ -1782,7 +1915,7 @@ function clearOutput() {
     bufferRecalcPending = false;
     outputGroupCounter = 0;
     typewriterQueue = [];
-    isTyping = false;
+    setTerminalTypingState(false);
     typewriterRunId++;
     updatePageIndicator();
     clearElement(getById('output'));
@@ -1816,7 +1949,7 @@ function renderCurrentPage() {
     typewriterRunId++;
     const runId = typewriterRunId;
     typewriterQueue = [];
-    isTyping = false;
+    setTerminalTypingState(false);
     skipTypewriter = false;
     
     pageLines.forEach((line, index) => {
@@ -1830,17 +1963,22 @@ function renderCurrentPage() {
 function processTypewriterQueue(runId = typewriterRunId) {
     if (runId !== typewriterRunId) return;
     if (typewriterQueue.length === 0) {
-        isTyping = false;
+        setTerminalTypingState(false);
         typewriterFrame = null;
+        scheduleHologramStart(260);
         return;
     }
     
-    isTyping = true;
+    setTerminalTypingState(true);
     const line = typewriterQueue.shift();
     const output = getById('output');
-    if (!output) return;
+    if (!output) {
+        setTerminalTypingState(false);
+        return;
+    }
     const div = document.createElement('div');
-    div.className = `output-line ${line.className}`.trim();
+    const typewriterClass = line.text.length ? 'terminal-typewriter-line terminal-typewriter-active' : '';
+    div.className = `output-line ${typewriterClass} ${line.className}`.trim();
     output.appendChild(div);
     
     const queueNextLine = (delay = TYPEWRITER_CONFIG.lineDelay) => {
@@ -1860,58 +1998,29 @@ function processTypewriterQueue(runId = typewriterRunId) {
 
     if (skipTypewriter || line.text.length === 0) {
         div.textContent = line.text;
+        div.classList.remove('terminal-typewriter-active');
         queueNextLine();
         return;
     }
-    
-    // Typewriter effect - fast but visible
-    let charIndex = 0;
-    const text = line.text;
-    let lastTypeTime = 0;
-    let charBudget = 0;
-    
-    function typeChar(timestamp = 0) {
-        if (runId !== typewriterRunId) return;
-        if (skipTypewriter) {
-            div.textContent = text;
-            queueNextLine();
-            return;
-        }
-        
-        if (charIndex < text.length) {
-            if (!lastTypeTime) lastTypeTime = timestamp;
-            const elapsed = Math.min(34, Math.max(0, timestamp - lastTypeTime));
-            lastTypeTime = timestamp;
-            charBudget += (elapsed / 1000) * TYPEWRITER_CONFIG.charsPerSecond;
-            const previousCharIndex = charIndex;
 
-            const charsThisFrame = prefersReducedMotion
-                ? text.length - charIndex
-                : Math.max(1, Math.min(
-                    TYPEWRITER_CONFIG.maxCharsPerFrame,
-                    text.length - charIndex,
-                    Math.floor(charBudget)
-                ));
-
-            if (charBudget >= 1 || prefersReducedMotion) {
-                const nextIndex = charIndex + charsThisFrame;
-                charIndex = nextIndex;
-                div.textContent = text.slice(0, charIndex);
-                charBudget = Math.max(0, charBudget - charsThisFrame);
-            }
-            
-            // Occasional click sound
-            if (charIndex !== previousCharIndex && charIndex % 12 === 0) {
+    typeTextSmooth(div, line.text, {
+        charsPerSecond: TYPEWRITER_CONFIG.terminalCharsPerSecond,
+        maxCharsPerFrame: TYPEWRITER_CONFIG.terminalMaxCharsPerFrame,
+        shouldCancel: () => runId !== typewriterRunId,
+        onFrame: frame => {
+            typewriterFrame = frame;
+        },
+        onChar: index => {
+            const now = performance.now();
+            if (now - lastTypewriterClickAt >= TYPEWRITER_CONFIG.terminalKeyClickMs) {
+                lastTypewriterClickAt = now;
                 AudioEngine.keyClick();
             }
-            
-            typewriterFrame = requestAnimationFrame(typeChar);
-        } else {
-            queueNextLine();
         }
-    }
-    
-    typewriterFrame = requestAnimationFrame(typeChar);
+    }).then(result => {
+        if (!result || result.cancelled || runId !== typewriterRunId) return;
+        queueNextLine();
+    });
 }
 
 function print(text, className = '') {
@@ -1946,7 +2055,7 @@ function renderCurrentPageInstant() {
     }
     typewriterRunId++;
     typewriterQueue = [];
-    isTyping = false;
+    setTerminalTypingState(false);
     if (typewriterFrame) {
         cancelAnimationFrame(typewriterFrame);
         typewriterFrame = null;
@@ -1961,13 +2070,15 @@ function renderCurrentPageInstant() {
     pageLines.forEach(line => {
         const div = document.createElement('div');
         div.textContent = line.text;
-        div.className = `output-line ${line.className}`.trim();
+        const typewriterClass = line.text.length ? 'terminal-typewriter-line' : '';
+        div.className = `output-line ${typewriterClass} ${line.className}`.trim();
         fragment.appendChild(div);
     });
 
     output.appendChild(fragment);
     
     updatePageIndicator();
+    scheduleHologramStart(260);
 }
 
 // ========================================
@@ -6401,7 +6512,7 @@ function initHologram() {
     if (hologramStarted) return;
     const canvas = document.getElementById('hologramCanvas');
     if (!canvas) return;
-    const panel = canvas.closest('.hologram-panel');
+    const panel = canvas.closest('.hologram-panel, .facility-overview-card');
     if (!panel || getComputedStyle(panel).display === 'none') return;
     hologramStarted = true;
     
@@ -6413,6 +6524,7 @@ function initHologram() {
 
     function getHologramFrameMs() {
         if (prefersReducedMotion) return 250;
+        if (document.body.classList.contains('terminal-typing')) return document.body.classList.contains('low-power') ? 180 : 120;
         return document.body.classList.contains('low-power') ? 66 : 33;
     }
     
@@ -6482,14 +6594,14 @@ function initHologram() {
         ctx.globalAlpha = 1;
     }
     
-    function drawDoor(door, rot) {
+    function drawDoor(door, rot, useGlow = true) {
         const { x, y, z, w, h } = door;
         const v = [[x,y,z],[x+w,y,z],[x+w,y+h,z],[x,y+h,z]];
         const p = v.map(pt => project(pt[0], pt[1], pt[2], rot));
         ctx.strokeStyle = '#ff3333';
         ctx.lineWidth = 1;
         ctx.shadowColor = '#ff3333';
-        ctx.shadowBlur = 3;
+        ctx.shadowBlur = useGlow ? 3 : 0;
         ctx.beginPath();
         p.forEach((pt, i) => i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
         ctx.closePath();
@@ -6519,10 +6631,12 @@ function initHologram() {
         const delta = lastFrameTime ? Math.min(66, timestamp - lastFrameTime) : getHologramFrameMs();
         lastFrameTime = timestamp;
         
-        ctx.fillStyle = 'rgba(3, 10, 3, 0.15)';
+        ctx.fillStyle = 'rgba(3, 10, 3, 0.42)';
         ctx.fillRect(0, 0, width, height);
         ctx.save();
-        ctx.translate(width / 2, height / 2 + 10);
+        const projectionScale = Math.max(0.72, Math.min(1.35, Math.min(width / 138, height / 88)));
+        ctx.translate(width / 2, height / 2 + height * 0.08);
+        ctx.scale(projectionScale, projectionScale);
         
         // Grid
         ctx.strokeStyle = '#20c20e';
@@ -6539,10 +6653,11 @@ function initHologram() {
         ctx.globalAlpha = 1;
         
         // Facility
+        const useGlow = !document.body.classList.contains('terminal-typing') && !document.body.classList.contains('low-power');
         ctx.shadowColor = '#20c20e';
-        ctx.shadowBlur = 2;
-        facility.rooms.forEach((room, i) => drawBox(room, angle, '#20c20e', i === 4 ? 0.2 : 0.4));
-        facility.doors.forEach(door => drawDoor(door, angle));
+        ctx.shadowBlur = useGlow ? 3 : 0;
+        facility.rooms.forEach((room, i) => drawBox(room, angle, '#20c20e', i === 4 ? 0.18 : 0.58));
+        facility.doors.forEach(door => drawDoor(door, angle, useGlow));
         ctx.restore();
         
         // Scan line
