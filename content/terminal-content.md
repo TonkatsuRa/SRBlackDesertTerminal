@@ -67,16 +67,12 @@ soundOff = SOUND OFF
 
 @amber Rest periods are authorized only when they preserve long-term output. Emotional distress should be logged through the appropriate channel and resolved without impact to mission deliverables.
 
-@red Great companies are built by people who understand that
-@red purpose begins where personal comfort ends.
+@red Great companies are built by people who understand that purpose begins where personal comfort ends.
 
-@red Every task completed, every break shortened, every concern set aside
-@red moves us closer to a stronger, leaner, more confident future.
+@red Every task completed, every break shortened, every concern set aside moves us closer to a stronger, leaner, more confident future.
 
-@red Your work creates value.
-@red Your value creates trust.
+@red Your work creates value. Your value creates trust.
 @red Your trust sustains the shareholders who sustain the mission.
-
 @red Together, we do not merely work.
 
 @red We deliver tomorrow.
@@ -84,8 +80,6 @@ soundOff = SOUND OFF
 @bright WELCOME BACK.
 @bright RESUME YOUR FUNCTION IMMEDIATELY.
 
-@dim Use HELP for command guidance.
-@dim ═══════════════════════════════════════════════════════
 ```
 
 ## help
