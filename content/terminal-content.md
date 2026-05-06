@@ -465,13 +465,16 @@ title = BASE DIAGNOSTIC
 ticker = FACILITY PASS: EXTERNAL COMMS DOWN // DEFENSE ARMED // DIS SENSORS DEGRADED // UNKNOWN LIFE SIGNS {spinner} {sweep:20}
 
 ## diagnostic.label
-network = NETWORK STATUS
-security = SECURITY INTEGRITY
-outposts = OUTPOST LINKS
-generator = POWER GENERATOR
-power = POWER RESERVES
-alarm = ALARM STATUS
-life = LIFE SIGNS
+network = ENTITY NOISE // SPECTRUM
+security = ENTITY NOISE // SPECTROMETER
+outposts = TACTICAL SWEEP // RADAR
+generator = GATE STABILITY // DUAL TRACE
+power = REACTOR // CONTAINMENT // SYNC
+alarm = ANOMALY TOMOGRAPHY // FIELD
+life = BIOSCAN ARRAY // VITALS
+events = LIVE EVENT LOG // DIAGNOSTICS
+integrity = SIGNAL STRENGTH
+uplink = UPLINK // PROCESSOR LOAD
 
 ## diagnostic.network
 state = alert

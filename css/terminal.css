@@ -545,8 +545,8 @@ body.terminal-typing .terminal-typewriter-active::after {
 .diagnostic-overlay.active { display: flex; }
 
 .diagnostic-panel {
-    width: min(1080px, 100%);
-    height: min(760px, calc(var(--viewport-height) - 36px));
+    width: min(1480px, 100%);
+    height: min(900px, calc(var(--viewport-height) - 36px));
     max-height: calc(var(--viewport-height) - 36px);
     border: 1px solid var(--amber);
     background:
@@ -608,6 +608,17 @@ body.terminal-typing .terminal-typewriter-active::after {
     overflow: auto;
 }
 
+.diagnostic-dashboard-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-rows: minmax(150px, 1fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(138px, 0.9fr);
+    grid-template-areas:
+        "scope scope bio bio radar radar"
+        "water water tomo tomo tomo tomo"
+        "react react tomo tomo tomo tomo"
+        "fabric fabric log log gauge uplink";
+    gap: 7px;
+}
+
 .diagnostic-card {
     border: 1px solid rgba(32, 194, 14, 0.26);
     background:
@@ -616,8 +627,26 @@ body.terminal-typing .terminal-typewriter-active::after {
     padding: 9px 10px;
     min-height: 0;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
     contain: layout paint style;
 }
+
+.diagnostic-card-feature {
+    border-color: rgba(0, 255, 213, 0.34);
+    box-shadow: inset 0 0 22px rgba(0, 255, 213, 0.035);
+}
+
+#diagGeneratorCard { grid-area: scope; }
+#diagLifeCard { grid-area: bio; }
+#diagOutpostCard { grid-area: radar; }
+#diagNetworkCard { grid-area: water; }
+#diagAlarmCard { grid-area: tomo; }
+#diagPowerCard { grid-area: react; }
+#diagSecurityCard { grid-area: fabric; }
+#diagEventsCard { grid-area: log; }
+#diagIntegrityCard { grid-area: gauge; }
+#diagUplinkCard { grid-area: uplink; }
 
 .diagnostic-card.wide {
     grid-column: 1 / -1;
@@ -659,7 +688,107 @@ body.terminal-typing .terminal-typewriter-active::after {
     white-space: pre;
     overflow: hidden;
     min-height: 6.1em;
+    flex: 1 1 auto;
 }
+
+.telemetry-widget {
+    position: relative;
+    display: block;
+    min-height: 118px;
+    white-space: pre;
+    background:
+        radial-gradient(circle at 50% 50%, rgba(57, 255, 20, 0.055), transparent 66%),
+        rgba(0, 8, 2, 0.38);
+}
+
+.telemetry-widget-wide {
+    min-height: 160px;
+}
+
+.telemetry-widget-large {
+    min-height: 100%;
+}
+
+.telemetry-svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-height: inherit;
+    overflow: hidden;
+    font-family: var(--terminal-font);
+}
+
+.telemetry-trace {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.25;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    vector-effect: non-scaling-stroke;
+    filter: drop-shadow(0 0 2px currentColor);
+}
+
+.telemetry-trace-thin {
+    stroke-width: 0.7;
+}
+
+.telemetry-trace-bold {
+    stroke-width: 1.8;
+}
+
+.telemetry-ekg-trace {
+    stroke-linecap: butt;
+    stroke-linejoin: miter;
+}
+
+.telemetry-fill {
+    fill: currentColor;
+    stroke: none;
+    opacity: 0.1;
+}
+
+.telemetry-hot-fill {
+    fill: currentColor;
+    stroke: none;
+    opacity: 0.16;
+}
+
+.telemetry-guide {
+    stroke: currentColor;
+    fill: none;
+    vector-effect: non-scaling-stroke;
+    opacity: 0.16;
+}
+
+.telemetry-fill-guide {
+    fill: currentColor;
+    opacity: 0.055;
+}
+
+.telemetry-glyph {
+    fill: currentColor;
+    font-family: var(--terminal-font);
+    font-size: 10px;
+    dominant-baseline: middle;
+    text-anchor: middle;
+    white-space: pre;
+    text-shadow: 0 0 3px currentColor;
+}
+
+.telemetry-label {
+    fill: currentColor;
+    font-family: var(--terminal-font);
+    font-size: 9px;
+    dominant-baseline: middle;
+    text-anchor: start;
+    opacity: 0.82;
+}
+
+.telemetry-cyan { color: var(--cyan); }
+.telemetry-green { color: var(--phosphor); }
+.telemetry-amber { color: var(--amber); }
+.telemetry-red { color: var(--red); }
+.telemetry-dim { color: rgba(57, 255, 20, 0.42); }
 
 .diagnostic-card.wide .diagnostic-readout {
     min-height: 8.55em;
@@ -687,12 +816,36 @@ body.terminal-typing .terminal-typewriter-active::after {
     .diagnostic-grid {
         grid-template-columns: 1fr;
         grid-template-rows: none;
+        grid-template-areas: none;
         align-content: start;
     }
+    #diagGeneratorCard,
+    #diagLifeCard,
+    #diagOutpostCard,
+    #diagNetworkCard,
+    #diagAlarmCard,
+    #diagPowerCard,
+    #diagSecurityCard,
+    #diagEventsCard,
+    #diagIntegrityCard,
+    #diagUplinkCard { grid-area: auto; }
     .diagnostic-card.wide { grid-column: auto; }
     .diagnostic-card { min-height: 118px; }
     .diagnostic-readout { font-size: 10px; min-height: 6.1em; }
     .diagnostic-card.wide .diagnostic-readout { min-height: 8.55em; }
+}
+
+@media (min-width: 761px) and (max-width: 1160px) {
+    .diagnostic-dashboard-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-rows: repeat(5, minmax(144px, 1fr));
+        grid-template-areas:
+            "scope scope bio bio"
+            "radar radar water water"
+            "tomo tomo tomo tomo"
+            "react react fabric fabric"
+            "log log gauge uplink";
+    }
 }
 
 /* ===== FACILITY STATUS ===== */
@@ -789,6 +942,11 @@ body.terminal-typing .terminal-typewriter-active::after {
     display: block;
     width: 100%;
     height: 100%;
+    min-height: 100%;
+}
+
+#facilityCanvas .telemetry-svg {
+    min-height: 100%;
 }
 
 .facility-map-hud {

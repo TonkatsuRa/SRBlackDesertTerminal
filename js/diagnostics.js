@@ -283,7 +283,10 @@ function applyTerminalContentToDom() {
         diagGeneratorCard: 'diagnostic.label.generator',
         diagPowerCard: 'diagnostic.label.power',
         diagAlarmCard: 'diagnostic.label.alarm',
-        diagLifeCard: 'diagnostic.label.life'
+        diagLifeCard: 'diagnostic.label.life',
+        diagEventsCard: 'diagnostic.label.events',
+        diagIntegrityCard: 'diagnostic.label.integrity',
+        diagUplinkCard: 'diagnostic.label.uplink'
     };
     Object.entries(diagnosticLabels).forEach(([cardId, key]) => {
         const card = getById(cardId);
@@ -389,7 +392,7 @@ function statusBlock(prefix, fallbackLines, frame) {
 
 function refreshStatusPanels() {
     if (diagnosticActive) {
-        diagnosticFrame = Math.max(diagnosticFrame, prefersReducedMotion ? 24 : 12);
+        diagnosticFrame = Math.max(diagnosticFrame, 48);
         renderDiagnosticDashboard();
     }
     if (facilityActive) {
@@ -567,33 +570,1238 @@ function heartbeat(frame, width = 44) {
     return output;
 }
 
-function renderDiagnosticDashboard() {
-    const frame = diagnosticFrame;
-    const loading = !prefersReducedMotion && frame < 12;
-    const phase = prefersReducedMotion ? 24 : frame;
-    const scanProgress = loading ? Math.min(99, frame * 8) : 100;
-    const meta = loading
-        ? `SCAN BUS: CALIBRATING ${asciiBar(scanProgress, 12)}`
-        : `SCAN BUS: LIVE // FRAME ${String(frame).padStart(4, '0')}`;
-    diagText('diagnosticMeta', meta);
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const GLYPH_CELL_WIDTH = 8;
+const GLYPH_CELL_HEIGHT = 12;
+const BLOCK_GLYPHS = '▁▂▃▄▅▆▇█';
+const DENSITY_GLYPHS = '░▒▓█';
 
-    if (loading) {
-        diagText('diagnosticTicker', `BASE SENSOR HANDSHAKE ${spinner(frame)} ${asciiSweep(frame, 18)}`);
-        [
-            ['diagNetwork', 'FACILITY COMMS'],
-            ['diagSecurity', 'DEFENSE GRID'],
-            ['diagOutpost', 'RELAY / DRONE LINKS'],
-            ['diagGenerator', 'GENERATOR CORE'],
-            ['diagPower', 'POWER RESERVES'],
-            ['diagAlarm', 'ALARMS / DIS SENSORS'],
-            ['diagLife', 'BIO SIGNATURES']
-        ].forEach(([id, label]) => diagText(id, diagnosticLoading(label, frame)));
-        ['diagNetworkStatus','diagSecurityStatus','diagOutpostStatus','diagGeneratorStatus','diagPowerStatus','diagAlarmStatus','diagLifeStatus']
-            .forEach(id => diagText(id, 'SCAN'));
-        ['diagNetworkCard','diagSecurityCard','diagOutpostCard','diagGeneratorCard','diagPowerCard','diagAlarmCard','diagLifeCard']
-            .forEach(id => diagCardState(id, 'ok'));
+function svgElement(name, attributes = {}) {
+    const element = document.createElementNS(SVG_NS, name);
+    Object.entries(attributes).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) element.setAttribute(key, String(value));
+    });
+    return element;
+}
+
+function clearSvgLayer(layer) {
+    if (layer) layer.replaceChildren();
+}
+
+function gridPoint(col, row, cellWidth = GLYPH_CELL_WIDTH, cellHeight = GLYPH_CELL_HEIGHT) {
+    return {
+        x: Math.round(col) * cellWidth + cellWidth / 2,
+        y: Math.round(row) * cellHeight + cellHeight / 2
+    };
+}
+
+function createSvgWidget(containerOrId, options = {}) {
+    const container = typeof containerOrId === 'string' ? getById(containerOrId) : containerOrId;
+    if (!container) return null;
+
+    const cols = Math.max(1, Math.round(options.cols || 32));
+    const rows = Math.max(1, Math.round(options.rows || 10));
+    const cellWidth = Math.max(1, Number(options.cellWidth || GLYPH_CELL_WIDTH));
+    const cellHeight = Math.max(1, Number(options.cellHeight || GLYPH_CELL_HEIGHT));
+    const width = cols * cellWidth;
+    const height = rows * cellHeight;
+    const widgetKey = `${cols}x${rows}:${cellWidth}x${cellHeight}:${options.kind || 'glyph'}`;
+
+    let svg = container.firstElementChild?.classList?.contains('telemetry-svg')
+        ? container.firstElementChild
+        : null;
+    if (!svg || svg.dataset.widgetKey !== widgetKey) {
+        container.textContent = '';
+        svg = svgElement('svg', {
+            class: `telemetry-svg ${options.className || ''}`.trim(),
+            viewBox: `0 0 ${width} ${height}`,
+            preserveAspectRatio: 'none',
+            'aria-hidden': 'true',
+            focusable: 'false',
+            'data-widget-key': widgetKey
+        });
+        const guide = svgElement('g', { 'data-layer': 'guide' });
+        const glyph = svgElement('g', { 'data-layer': 'glyph' });
+        const label = svgElement('g', { 'data-layer': 'label' });
+        [guide, glyph, label].forEach(layer => {
+            layer.dataset.cellWidth = String(cellWidth);
+            layer.dataset.cellHeight = String(cellHeight);
+        });
+        svg.append(guide, glyph, label);
+        container.appendChild(svg);
+    } else {
+        svg.setAttribute('class', `telemetry-svg ${options.className || ''}`.trim());
+    }
+
+    const guideLayer = svg.querySelector('[data-layer="guide"]');
+    const glyphLayer = svg.querySelector('[data-layer="glyph"]');
+    const labelLayer = svg.querySelector('[data-layer="label"]');
+    return { container, svg, guideLayer, glyphLayer, labelLayer, cols, rows, cellWidth, cellHeight, width, height };
+}
+
+function svgTextGlyph(layer, glyph, col, row, options = {}) {
+    if (!layer || glyph === undefined || glyph === null) return null;
+    const cellWidth = Number(options.cellWidth || layer.dataset.cellWidth || GLYPH_CELL_WIDTH);
+    const cellHeight = Number(options.cellHeight || layer.dataset.cellHeight || GLYPH_CELL_HEIGHT);
+    const point = gridPoint(col, row, cellWidth, cellHeight);
+    const text = svgElement('text', {
+        x: point.x,
+        y: point.y,
+        class: `telemetry-glyph ${options.className || 'telemetry-green'}`.trim(),
+        opacity: options.opacity ?? 1
+    });
+    if (options.fontSize) text.setAttribute('font-size', options.fontSize);
+    text.textContent = String(glyph);
+    layer.appendChild(text);
+    return text;
+}
+
+function svgLabel(layer, text, col, row, options = {}) {
+    if (!layer || text === undefined || text === null) return null;
+    const cellWidth = Number(options.cellWidth || layer.dataset.cellWidth || GLYPH_CELL_WIDTH);
+    const cellHeight = Number(options.cellHeight || layer.dataset.cellHeight || GLYPH_CELL_HEIGHT);
+    const point = gridPoint(col, row, cellWidth, cellHeight);
+    const label = svgElement('text', {
+        x: point.x,
+        y: point.y,
+        class: `telemetry-label ${options.className || 'telemetry-dim'}`.trim(),
+        opacity: options.opacity ?? 1
+    });
+    if (options.anchor) label.setAttribute('text-anchor', options.anchor);
+    if (options.fontSize) label.setAttribute('font-size', options.fontSize);
+    label.textContent = String(text);
+    layer.appendChild(label);
+    return label;
+}
+
+function renderGlyphRow(layer, row, glyphs, options = {}) {
+    String(glyphs || '').split('').forEach((glyph, index) => {
+        svgTextGlyph(layer, glyph, (options.col || 0) + index, row, options);
+    });
+}
+
+function renderGlyphMatrix(layer, matrix, options = {}) {
+    (matrix || []).forEach((rowGlyphs, rowIndex) => {
+        renderGlyphRow(layer, (options.row || 0) + rowIndex, rowGlyphs, options);
+    });
+}
+
+function drawSvgGuideLine(widget, col1, row1, col2, row2, options = {}) {
+    const start = gridPoint(col1, row1, widget.cellWidth, widget.cellHeight);
+    const end = gridPoint(col2, row2, widget.cellWidth, widget.cellHeight);
+    widget.guideLayer.appendChild(svgElement('line', {
+        x1: start.x,
+        y1: start.y,
+        x2: end.x,
+        y2: end.y,
+        class: `telemetry-guide ${options.className || 'telemetry-dim'}`.trim(),
+        opacity: options.opacity ?? 0.16
+    }));
+}
+
+function drawSvgGuideRect(widget, col, row, cols, rows, options = {}) {
+    widget.guideLayer.appendChild(svgElement('rect', {
+        x: col * widget.cellWidth,
+        y: row * widget.cellHeight,
+        width: cols * widget.cellWidth,
+        height: rows * widget.cellHeight,
+        class: `telemetry-guide ${options.className || 'telemetry-dim'}`.trim(),
+        opacity: options.opacity ?? 0.16
+    }));
+}
+
+function drawSvgGuideCircle(widget, col, row, radiusCols, options = {}) {
+    const point = gridPoint(col, row, widget.cellWidth, widget.cellHeight);
+    widget.guideLayer.appendChild(svgElement('circle', {
+        cx: point.x,
+        cy: point.y,
+        r: radiusCols * widget.cellWidth,
+        class: `telemetry-guide ${options.className || 'telemetry-dim'}`.trim(),
+        opacity: options.opacity ?? 0.16
+    }));
+}
+
+function svgPolyline(layer, points, options = {}) {
+    if (!layer || !points?.length) return null;
+    const polyline = svgElement('polyline', {
+        points: points.map(point => `${Number(point.x).toFixed(1)},${Number(point.y).toFixed(1)}`).join(' '),
+        class: `telemetry-trace ${options.className || 'telemetry-green'}`.trim(),
+        opacity: options.opacity ?? 0.86
+    });
+    if (options.strokeWidth) polyline.setAttribute('stroke-width', options.strokeWidth);
+    layer.appendChild(polyline);
+    return polyline;
+}
+
+function svgPath(layer, d, options = {}) {
+    if (!layer || !d) return null;
+    const path = svgElement('path', {
+        d,
+        class: `telemetry-trace ${options.className || 'telemetry-green'}`.trim(),
+        opacity: options.opacity ?? 0.86
+    });
+    if (options.strokeWidth) path.setAttribute('stroke-width', options.strokeWidth);
+    layer.appendChild(path);
+    return path;
+}
+
+function svgLayerLine(layer, x1, y1, x2, y2, options = {}) {
+    if (!layer) return null;
+    const line = svgElement('line', {
+        x1,
+        y1,
+        x2,
+        y2,
+        class: `telemetry-trace ${options.className || 'telemetry-green'}`.trim(),
+        opacity: options.opacity ?? 0.74
+    });
+    if (options.strokeWidth) line.setAttribute('stroke-width', options.strokeWidth);
+    layer.appendChild(line);
+    return line;
+}
+
+function svgLayerRect(layer, x, y, width, height, options = {}) {
+    if (!layer) return null;
+    const rect = svgElement('rect', {
+        x,
+        y,
+        width,
+        height,
+        class: options.className || 'telemetry-fill telemetry-green',
+        opacity: options.opacity ?? 0.12
+    });
+    layer.appendChild(rect);
+    return rect;
+}
+
+function blockGlyph(value) {
+    const index = Math.max(0, Math.min(BLOCK_GLYPHS.length - 1, Math.round(value * (BLOCK_GLYPHS.length - 1))));
+    return BLOCK_GLYPHS[index];
+}
+
+function densityGlyph(value) {
+    const index = Math.max(0, Math.min(DENSITY_GLYPHS.length - 1, Math.floor(value * DENSITY_GLYPHS.length)));
+    return DENSITY_GLYPHS[index];
+}
+
+function shortTelemetryLine(value, width) {
+    return String(value || '').replace(/\s+/g, ' ').slice(0, width).padEnd(width, ' ');
+}
+
+function fixedTelemetryLine(value, width) {
+    return String(value || '').replace(/\t/g, ' ').slice(0, width).padEnd(width, ' ');
+}
+
+function glyphProgressBar(value, width = 10) {
+    const safeValue = Math.max(0, Math.min(100, Math.round(value)));
+    const filled = Math.round((safeValue / 100) * width);
+    return `${'█'.repeat(filled)}${'░'.repeat(width - filled)}`;
+}
+
+function shiftedGlyphPattern(pattern, frame, width, step = 1) {
+    const glyphs = Array.from(pattern || '');
+    if (!glyphs.length) return ''.padEnd(width, ' ');
+    let output = '';
+    for (let i = 0; i < width; i++) output += glyphs[(frame * step + i) % glyphs.length];
+    return output;
+}
+
+function renderFixedGlyphLine(layer, row, text, options = {}) {
+    renderGlyphRow(layer, row, fixedTelemetryLine(text, options.width || 40), {
+        col: options.col || 1,
+        className: options.className || 'telemetry-green',
+        opacity: options.opacity ?? 0.84
+    });
+}
+
+function renderWidgetFrame(widget, options = {}) {
+    clearSvgLayer(widget.guideLayer);
+    clearSvgLayer(widget.glyphLayer);
+    clearSvgLayer(widget.labelLayer);
+    drawSvgGuideRect(widget, 0, 0, widget.cols, widget.rows, { opacity: 0.2, className: options.className || 'telemetry-green' });
+}
+
+function renderDiagnosticBootRouteWidget(id, frame, progress) {
+    const widget = createSvgWidget(id, { cols: 42, rows: 10, kind: 'diag-boot-route' });
+    if (!widget) return;
+    renderWidgetFrame(widget, { className: 'telemetry-cyan' });
+    svgLabel(widget.labelLayer, 'NETWORK TOPOLOGY // BOOT', 1, 1, { className: 'telemetry-amber' });
+    [
+        '[CORE]─[BUS-A]─[LAB-01]',
+        '   │      └──[LAB-02]',
+        '   ├─────────[ARCHIVE]',
+        '   └─[SEC]─[GATE]─[RELAY]'
+    ].forEach((line, index) => renderFixedGlyphLine(widget.glyphLayer, index + 3, line, {
+        col: 2,
+        width: 32,
+        className: index === 3 ? 'telemetry-amber' : 'telemetry-cyan',
+        opacity: 0.86
+    }));
+    const packetPath = [8, 14, 22, 30, 34];
+    svgTextGlyph(widget.glyphLayer, frame % 4 < 2 ? '●' : '◆', packetPath[frame % packetPath.length], 3 + Math.min(3, frame % 4), { className: 'telemetry-green' });
+    renderFixedGlyphLine(widget.glyphLayer, 8, `PACKET BUS ${glyphProgressBar(progress, 12)} ${String(progress).padStart(2, '0')}%`, {
+        col: 2,
+        width: 36,
+        className: 'telemetry-green'
+    });
+}
+
+function renderDiagnosticBootProcessWidget(id, frame, progress) {
+    const widget = createSvgWidget(id, { cols: 42, rows: 10, kind: 'diag-boot-process' });
+    if (!widget) return;
+    renderWidgetFrame(widget, { className: 'telemetry-green' });
+    svgLabel(widget.labelLayer, 'PROCESS ARRAY', 1, 1, { className: 'telemetry-amber' });
+    const spinner = ['◢', '◐', '◒', '◣'];
+    [
+        ['INDEXING ARCHIVE', progress + 8],
+        ['DECRYPTING SECURITY', progress - 14],
+        ['SCANNING RESIDUE', progress + 21],
+        ['LOCKING PERIMETER', progress - 4]
+    ].forEach(([label, value], index) => {
+        const safeValue = Math.max(4, Math.min(99, Math.round(value)));
+        const cls = index === 1 ? 'telemetry-amber' : 'telemetry-green';
+        renderFixedGlyphLine(widget.glyphLayer, index + 3, `${spinner[(frame + index) % spinner.length]} ${label.padEnd(20, ' ')} ${glyphProgressBar(safeValue, 8)} ${String(safeValue).padStart(2, '0')}%`, {
+            col: 2,
+            width: 38,
+            className: cls
+        });
+    });
+}
+
+function renderDiagnosticBootRadarWidget(id, frame, progress) {
+    const widget = createSvgWidget(id, { cols: 34, rows: 11, kind: 'diag-boot-radar' });
+    if (!widget) return;
+    renderWidgetFrame(widget, { className: 'telemetry-cyan' });
+    const centerCol = 17;
+    const centerRow = 5;
+    [2, 4, 6, 8].forEach(radius => drawSvgGuideCircle(widget, centerCol, centerRow, radius, { opacity: 0.11, className: 'telemetry-cyan' }));
+    drawSvgGuideLine(widget, centerCol, 1, centerCol, 9, { opacity: 0.13, className: 'telemetry-cyan' });
+    drawSvgGuideLine(widget, 5, centerRow, 29, centerRow, { opacity: 0.13, className: 'telemetry-cyan' });
+    svgLabel(widget.labelLayer, 'TRIANGULATING', 1, 1, { className: 'telemetry-amber' });
+    const angle = prefersReducedMotion ? -0.4 : frame * 0.33;
+    const trail = '·:+*#';
+    for (let step = 1; step <= 8; step++) {
+        const col = centerCol + Math.round(Math.cos(angle) * step * 1.25);
+        const row = centerRow + Math.round(Math.sin(angle) * step * 0.55);
+        svgTextGlyph(widget.glyphLayer, trail[Math.min(trail.length - 1, Math.floor(step / 2))], col, row, { className: 'telemetry-green', opacity: 0.46 + step * 0.05 });
+    }
+    [
+        ['△', 9, 3, 'telemetry-green'],
+        ['□', 24, 4, 'telemetry-cyan'],
+        ['◇', 21, 7, 'telemetry-red']
+    ].forEach(([glyph, col, row, cls]) => svgTextGlyph(widget.glyphLayer, glyph, col, row, { className: cls, opacity: cls === 'telemetry-red' && frame % 6 < 3 ? 0.5 : 1 }));
+    renderFixedGlyphLine(widget.glyphLayer, 9, `RELAY LOCK ${glyphProgressBar(progress, 8)} ${String(progress).padStart(2, '0')}%`, {
+        col: 2,
+        width: 29,
+        className: 'telemetry-amber'
+    });
+}
+
+function renderDiagnosticBootSignalWidget(id, frame, progress) {
+    const widget = createSvgWidget(id, { cols: 42, rows: 10, kind: 'diag-boot-signal' });
+    if (!widget) return;
+    renderWidgetFrame(widget, { className: 'telemetry-amber' });
+    for (let col = 4; col < widget.cols; col += 4) drawSvgGuideLine(widget, col, 2, col, 7, { opacity: 0.08, className: 'telemetry-green' });
+    for (let row = 3; row < 8; row += 2) drawSvgGuideLine(widget, 2, row, 39, row, { opacity: 0.08, className: 'telemetry-green' });
+    svgLabel(widget.labelLayer, 'SIGNAL OSCILLOSCOPE // CAL', 1, 1, { className: 'telemetry-amber' });
+    const signal = shiftedGlyphPattern('▁▂▃▄▅▆▇█▇▆▅▄▃▂▁▁▂▃▄', frame, 28);
+    renderFixedGlyphLine(widget.glyphLayer, 4, `MANA ${signal}`, { col: 2, width: 38, className: 'telemetry-green' });
+    const pulse = shiftedGlyphPattern('────╮╭────────╮╭──────', frame, 25);
+    renderFixedGlyphLine(widget.glyphLayer, 6, `SYNC ${pulse}`, { col: 2, width: 38, className: 'telemetry-cyan' });
+    renderFixedGlyphLine(widget.glyphLayer, 8, `BUFFER ${glyphProgressBar(progress, 12)} ${String(progress).padStart(2, '0')}%`, { col: 2, width: 36, className: 'telemetry-amber' });
+}
+
+function renderDiagnosticBootStatusWidget(id, frame, progress) {
+    const widget = createSvgWidget(id, { cols: 42, rows: 10, kind: 'diag-boot-status' });
+    if (!widget) return;
+    renderWidgetFrame(widget, { className: 'telemetry-green' });
+    svgLabel(widget.labelLayer, 'SYSTEM STATUS', 1, 1, { className: 'telemetry-amber' });
+    [
+        ['CORE TEMP', 48, 'telemetry-green'],
+        ['POWER GRID', Math.min(100, progress + 21), 'telemetry-green'],
+        ['UPLINK', Math.max(9, progress - 18), 'telemetry-amber'],
+        ['ARCHIVE BUS', Math.min(100, progress + 8), 'telemetry-cyan'],
+        ['SEC LAYER', 100, 'telemetry-green']
+    ].forEach(([label, value, cls], index) => {
+        const display = label === 'CORE TEMP' ? '048C' : `${String(Math.round(value)).padStart(3, '0')}%`;
+        renderFixedGlyphLine(widget.glyphLayer, index + 3, `${label.padEnd(12, ' ')} ${display} [${glyphProgressBar(value, 8)}]`, {
+            col: 2,
+            width: 37,
+            className: cls
+        });
+    });
+}
+
+function renderDiagnosticBootContainmentWidget(id, frame, progress) {
+    const widget = createSvgWidget(id, { cols: 42, rows: 10, kind: 'diag-boot-containment' });
+    if (!widget) return;
+    renderWidgetFrame(widget, { className: 'telemetry-amber' });
+    svgLabel(widget.labelLayer, 'LIVE TELEMETRY // ARMING', 1, 1, { className: 'telemetry-amber' });
+    const gate = shiftedGlyphPattern('▁▂▃▄▅▇█▇▅▃▂▁▂▃▄▆█', frame, 17);
+    const noise = shiftedGlyphPattern('░▒▓▒░▒▓█▓▒░▒░▓▒░▒▓', frame, 17);
+    const containment = shiftedGlyphPattern('▄▅▆█▇▅▄▃▂▁▂▄▆█▇▅', frame, 17);
+    renderFixedGlyphLine(widget.glyphLayer, 3, `GATE STABILITY ${gate} ${String(Math.max(12, progress - 31)).padStart(2, '0')}%`, { col: 2, width: 38, className: 'telemetry-green' });
+    renderFixedGlyphLine(widget.glyphLayer, 5, `ENTITY NOISE   ${noise} ${String(Math.min(99, progress + 19)).padStart(2, '0')}%`, { col: 2, width: 38, className: 'telemetry-cyan' });
+    renderFixedGlyphLine(widget.glyphLayer, 7, `CONTAINMENT    ${containment} WARN`, { col: 2, width: 38, className: 'telemetry-amber' });
+    svgTextGlyph(widget.glyphLayer, ['◢', '◐', '◒', '◣'][frame % 4], 36, 8, { className: 'telemetry-red', opacity: 0.78 });
+}
+
+function renderDiagnosticBootBioWidget(id, frame, progress) {
+    const widget = createSvgWidget(id, { cols: 82, rows: 10, kind: 'diag-boot-bio' });
+    if (!widget) return;
+    renderWidgetFrame(widget, { className: 'telemetry-red' });
+    svgLabel(widget.labelLayer, 'BIO-MONITOR // SUBJECT VITAL TRACE', 1, 1, { className: 'telemetry-amber' });
+    const traces = [
+        ['SUBJ-01', shiftedGlyphPattern('──────╮╭───────╮╭────────╮╭───────', frame, 44)],
+        ['SUBJ-02', shiftedGlyphPattern('───╮╭─╮  ╭──────╮╭─╮     ╭──────', frame + 2, 44)],
+        ['SUBJ-03', shiftedGlyphPattern('─────────────╮╭─────────────────', frame + 4, 44)]
+    ];
+    traces.forEach(([label, trace], index) => {
+        renderFixedGlyphLine(widget.glyphLayer, 3 + index * 2, `${label}  ${trace}`, {
+            col: 2,
+            width: 64,
+            className: index === 2 ? 'telemetry-amber' : 'telemetry-green'
+        });
+    });
+    renderFixedGlyphLine(widget.glyphLayer, 9, `NEURAL COHERENCE ${glyphProgressBar(progress, 18)} ${String(progress).padStart(2, '0')}%`, {
+        col: 2,
+        width: 58,
+        className: 'telemetry-cyan'
+    });
+}
+
+function renderDiagnosticBootWidget(id, label, frame) {
+    const progress = Math.max(8, Math.min(99, Math.round(12 + frame * 7.4)));
+    if (id === 'diagNetwork') return renderDiagnosticBootRouteWidget(id, frame, progress);
+    if (id === 'diagSecurity') return renderDiagnosticBootProcessWidget(id, frame, progress);
+    if (id === 'diagOutpost') return renderDiagnosticBootRadarWidget(id, frame, progress);
+    if (id === 'diagGenerator') return renderDiagnosticBootSignalWidget(id, frame, progress);
+    if (id === 'diagPower') return renderDiagnosticBootStatusWidget(id, frame, progress);
+    if (id === 'diagAlarm') return renderDiagnosticBootContainmentWidget(id, frame, progress);
+    if (id === 'diagLife') return renderDiagnosticBootBioWidget(id, frame, progress);
+    renderStatusLinesWidget(id, [`BOOTING ${label}`, `BUS ${glyphProgressBar(progress, 14)} ${progress}%`], frame, { kind: 'diag-boot-fallback' });
+}
+
+function renderOscilloscopeWidget(id, frame, generatorValue) {
+    const widget = createSvgWidget(id, { cols: 42, rows: 10, kind: 'oscilloscope' });
+    if (!widget) return;
+    renderWidgetFrame(widget, { className: 'telemetry-amber' });
+    for (let col = 4; col < widget.cols; col += 4) drawSvgGuideLine(widget, col, 1, col, 8, { opacity: 0.09, className: 'telemetry-green' });
+    for (let row = 2; row < 9; row += 2) drawSvgGuideLine(widget, 1, row, 40, row, { opacity: 0.1, className: 'telemetry-green' });
+    drawSvgGuideLine(widget, 1, 5, 40, 5, { opacity: 0.2, className: 'telemetry-amber' });
+    svgLabel(widget.labelLayer, 'TRACE A', 1, 1, { className: 'telemetry-green' });
+    svgLabel(widget.labelLayer, 'TRACE B', 12, 1, { className: 'telemetry-cyan' });
+    svgLabel(widget.labelLayer, `SYNC ${statusGet('diagnostic.generator.core', 'LOCKED').toUpperCase().slice(0, 10)}`, 24, 1, { className: 'telemetry-amber' });
+    svgLabel(widget.labelLayer, `RATE ${statusGet('diagnostic.generator.sample_rate', '44.1K')}`, 31, 9, { className: 'telemetry-dim' });
+
+    const load = Math.max(0, Math.min(1, generatorValue / 100));
+    for (let col = 2; col < 40; col++) {
+        const t = frame * 0.23 + col * 0.34;
+        const a = 0.5 + Math.sin(t) * 0.28 + Math.sin(t * 0.43) * 0.1;
+        const b = 0.5 + Math.cos(t * 0.74 + load * 2) * 0.22 + Math.sin(t * 0.18) * 0.12;
+        const rowA = Math.max(2, Math.min(8, Math.round(8 - a * 6)));
+        const rowB = Math.max(2, Math.min(8, Math.round(8 - b * 6)));
+        svgTextGlyph(widget.glyphLayer, blockGlyph(a), col, rowA, { className: 'telemetry-green' });
+        svgTextGlyph(widget.glyphLayer, rowA === rowB ? '█' : blockGlyph(b), col, rowB, { className: rowA === rowB ? 'telemetry-amber' : 'telemetry-cyan', opacity: rowA === rowB ? 0.95 : 0.86 });
+    }
+}
+
+function renderRadarWidget(id, frame) {
+    const widget = createSvgWidget(id, { cols: 34, rows: 11, kind: 'radar' });
+    if (!widget) return;
+    renderWidgetFrame(widget, { className: 'telemetry-cyan' });
+    const centerCol = 17;
+    const centerRow = 5;
+    [2, 4, 6, 8].forEach(radius => drawSvgGuideCircle(widget, centerCol, centerRow, radius, { opacity: 0.12, className: 'telemetry-cyan' }));
+    drawSvgGuideLine(widget, centerCol, 0, centerCol, 10, { opacity: 0.14, className: 'telemetry-cyan' });
+    drawSvgGuideLine(widget, 4, centerRow, 30, centerRow, { opacity: 0.14, className: 'telemetry-cyan' });
+    svgLabel(widget.labelLayer, '000', 16, 0, { className: 'telemetry-dim' });
+    svgLabel(widget.labelLayer, '180', 16, 10, { className: 'telemetry-dim' });
+    svgLabel(widget.labelLayer, 'RELAYS', 1, 1, { className: 'telemetry-amber' });
+
+    const angle = prefersReducedMotion ? -0.6 : frame * 0.16;
+    const sweepGlyphs = '·:+*#';
+    for (let step = 1; step <= 9; step++) {
+        const col = centerCol + Math.round(Math.cos(angle) * step * 1.25);
+        const row = centerRow + Math.round(Math.sin(angle) * step * 0.55);
+        if (col > 1 && col < widget.cols - 1 && row > 0 && row < widget.rows) {
+            svgTextGlyph(widget.glyphLayer, sweepGlyphs[Math.min(sweepGlyphs.length - 1, Math.floor(step / 2))], col, row, { className: 'telemetry-green', opacity: 0.45 + step * 0.05 });
+        }
+    }
+
+    [
+        { glyph: '△', angle: -0.8, radius: 7.5, cls: 'telemetry-amber' },
+        { glyph: '□', angle: 0.45, radius: 5.6, cls: 'telemetry-green' },
+        { glyph: '◇', angle: 1.9, radius: 6.9, cls: 'telemetry-red' },
+        { glyph: '○', angle: 2.9, radius: 4.8, cls: 'telemetry-cyan' }
+    ].forEach((contact, index) => {
+        const pulse = prefersReducedMotion ? 0 : Math.sin(frame * 0.12 + index) * 0.6;
+        const col = centerCol + Math.round(Math.cos(contact.angle + pulse * 0.03) * contact.radius * 1.2);
+        const row = centerRow + Math.round(Math.sin(contact.angle + pulse * 0.03) * contact.radius * 0.55);
+        svgTextGlyph(widget.glyphLayer, contact.glyph, col, row, { className: contact.cls, opacity: contact.cls === 'telemetry-red' && frame % 8 < 4 ? 0.55 : 1 });
+    });
+}
+
+function renderHeatmapWidget(id, frame, mainPower, reservePower) {
+    const widget = createSvgWidget(id, { cols: 34, rows: 10, kind: 'heatmap' });
+    if (!widget) return;
+    renderWidgetFrame(widget, { className: 'telemetry-green' });
+    svgLabel(widget.labelLayer, 'MAIN BUS', 1, 1, { className: 'telemetry-amber' });
+    svgLabel(widget.labelLayer, 'RESERVE', 1, 8, { className: 'telemetry-cyan' });
+    for (let row = 2; row <= 7; row++) {
+        for (let col = 2; col <= 31; col++) {
+            const centerBias = 1 - Math.min(1, Math.abs(col - 17) / 16);
+            const powerBias = row < 5 ? mainPower / 100 : reservePower / 100;
+            const noise = (Math.sin(frame * 0.17 + col * 0.48 + row * 0.91) + 1) * 0.18;
+            const value = Math.max(0, Math.min(1, powerBias * 0.64 + centerBias * 0.24 + noise));
+            const cls = value > 0.82 ? 'telemetry-red' : value > 0.62 ? 'telemetry-amber' : 'telemetry-green';
+            svgTextGlyph(widget.glyphLayer, densityGlyph(value), col, row, { className: cls, opacity: 0.62 + value * 0.38 });
+        }
+    }
+}
+
+function renderWaterfallWidget(id, frame, networkValue) {
+    const widget = createSvgWidget(id, { cols: 40, rows: 10, kind: 'waterfall' });
+    if (!widget) return;
+    renderWidgetFrame(widget, { className: 'telemetry-cyan' });
+    svgLabel(widget.labelLayer, 'SPECTRUM WATERFALL', 1, 1, { className: 'telemetry-amber' });
+    for (let row = 2; row < 9; row++) {
+        for (let col = 1; col < 39; col++) {
+            const band = Math.sin((col + frame * 0.8 - row * 2.4) * 0.34);
+            const carrier = Math.sin((col - 20) * 0.18) * 0.24;
+            const level = Math.max(0, Math.min(1, networkValue / 120 + band * 0.26 + carrier + Math.sin(row + frame * 0.12) * 0.08));
+            const cls = level > 0.82 ? 'telemetry-red' : level > 0.64 ? 'telemetry-amber' : level > 0.42 ? 'telemetry-green' : 'telemetry-dim';
+            svgTextGlyph(widget.glyphLayer, densityGlyph(level), col, row, { className: cls, opacity: 0.5 + level * 0.46 });
+        }
+    }
+}
+
+function renderStatusLinesWidget(id, lines, frame, options = {}) {
+    const widget = createSvgWidget(id, { cols: options.cols || 40, rows: options.rows || 10, kind: options.kind || 'status-lines' });
+    if (!widget) return;
+    renderWidgetFrame(widget, { className: options.className || 'telemetry-green' });
+    (lines || []).slice(0, widget.rows - 3).forEach((line, index) => {
+        renderGlyphRow(widget.glyphLayer, index + 1, shortTelemetryLine(line, widget.cols - 2), {
+            col: 1,
+            className: index === 0 ? (options.headerClass || 'telemetry-amber') : (options.className || 'telemetry-green'),
+            opacity: index === 0 ? 0.96 : 0.78
+        });
+    });
+    const trace = asciiGraph(frame, widget.cols - 6).replace(/[._\-=+#~]/g, char => {
+        if (char === '.' || char === '_') return '·';
+        if (char === '-' || char === '=') return ':';
+        if (char === '~' || char === '+') return '*';
+        return '#';
+    });
+    renderGlyphRow(widget.glyphLayer, widget.rows - 1, trace, { col: 3, className: options.traceClass || 'telemetry-cyan', opacity: 0.82 });
+}
+
+function renderBioscanWidget(id, frame, stats = {}) {
+    const widget = createSvgWidget(id, { cols: 82, rows: 10, kind: 'bioscan' });
+    if (!widget) return;
+    renderWidgetFrame(widget, { className: 'telemetry-red' });
+    const lifeCount = stats.lifeCount || 0;
+    const unstableLife = stats.unstableLife || 0;
+    const unknownLife = stats.unknownLife || 0;
+    renderGlyphRow(widget.glyphLayer, 1, shortTelemetryLine(`BIO COUNT ${String(lifeCount).padStart(2, '0')} // UNSTABLE ${String(unstableLife).padStart(2, '0')} // UNKNOWN ${String(unknownLife).padStart(2, '0')}`, 34), { col: 1, className: 'telemetry-amber' });
+    renderGlyphRow(widget.glyphLayer, 3, shortTelemetryLine(`O2 SAT ${statusGet('diagnostic.life.o2', '91%')}  RESP ${statusGet('diagnostic.life.resp', 'ERRATIC')}`, 34), { col: 1, className: 'telemetry-green' });
+    renderGlyphRow(widget.glyphLayer, 5, shortTelemetryLine(`NEURAL ${statusGet('diagnostic.life.neural', 'COHERENCE LOW')}`, 34), { col: 1, className: 'telemetry-cyan' });
+    drawSvgGuideLine(widget, 37, 5, 78, 5, { opacity: 0.18, className: 'telemetry-red' });
+    for (let col = 38; col < 78; col++) {
+        const index = (frame + col) % 17;
+        const pattern = index < 3 ? '─' : index < 5 ? '╱' : index < 7 ? '╲' : index < 12 ? '─' : index < 14 ? '╱' : '╲';
+        const row = 5 + (pattern === '╱' ? -1 : pattern === '╲' ? 1 : 0);
+        svgTextGlyph(widget.glyphLayer, pattern, col, row, { className: row === 5 ? 'telemetry-green' : 'telemetry-red' });
+    }
+    ['○', '│', '│', '△'].forEach((glyph, index) => svgTextGlyph(widget.glyphLayer, glyph, 72, 2 + index, { className: 'telemetry-cyan', opacity: 0.8 }));
+}
+
+function clampDiagnostic(value, min = 0, max = 1) {
+    return Math.max(min, Math.min(max, value));
+}
+
+function smoothDiagnostic(value) {
+    const t = clampDiagnostic(value);
+    return t * t * (3 - 2 * t);
+}
+
+function mixDiagnostic(from, to, amount) {
+    return from + (to - from) * clampDiagnostic(amount);
+}
+
+function getDiagnosticPhase(frame) {
+    const bootFrames = 24;
+    const transitionFrames = 24;
+    const liveFrame = bootFrames + transitionFrames;
+    const effectiveFrame = prefersReducedMotion ? liveFrame : Math.max(0, frame);
+    const bootProgress = smoothDiagnostic(effectiveFrame / bootFrames);
+    const transitionProgress = smoothDiagnostic((effectiveFrame - bootFrames) / transitionFrames);
+    const detail = prefersReducedMotion ? 1 : smoothDiagnostic((effectiveFrame - 4) / (liveFrame - 4));
+    const mode = prefersReducedMotion || effectiveFrame >= liveFrame
+        ? 'live'
+        : effectiveFrame < bootFrames ? 'boot' : 'transition';
+    const sensorProgress = Math.round(mode === 'boot'
+        ? mixDiagnostic(8, 66, bootProgress)
+        : mixDiagnostic(66, 100, transitionProgress));
+    return { mode, bootProgress, transitionProgress, detail, sensorProgress };
+}
+
+function diagnosticStatusText(liveText, phase, bootText = 'BOOT', transitionText = 'SYNC') {
+    if (phase.mode === 'boot') return bootText;
+    if (phase.mode === 'transition') return transitionText;
+    return liveText;
+}
+
+function diagnosticLiveValue(liveValue, bootValue, phase) {
+    return mixDiagnostic(bootValue, liveValue, phase.detail);
+}
+
+function drawDashboardGrid(widget, options = {}) {
+    renderWidgetFrame(widget, { className: options.className || 'telemetry-green' });
+    const colStep = options.colStep || 6;
+    const rowStep = options.rowStep || 3;
+    for (let col = colStep; col < widget.cols; col += colStep) {
+        drawSvgGuideLine(widget, col, 1, col, widget.rows - 2, { className: options.className || 'telemetry-green', opacity: 0.06 });
+    }
+    for (let row = rowStep; row < widget.rows; row += rowStep) {
+        drawSvgGuideLine(widget, 1, row, widget.cols - 2, row, { className: options.className || 'telemetry-green', opacity: 0.06 });
+    }
+}
+
+function drawDiagnosticPhaseScan(widget, phase, label) {
+    if (phase.detail >= 0.98) return;
+    const scanCol = Math.round(mixDiagnostic(1, widget.cols - 2, phase.sensorProgress / 100));
+    drawSvgGuideLine(widget, scanCol, 1, scanCol, widget.rows - 2, {
+        className: 'telemetry-amber',
+        opacity: 0.28 - phase.detail * 0.12
+    });
+    renderFixedGlyphLine(widget.glyphLayer, widget.rows - 1, `READING ${label} ${glyphProgressBar(phase.sensorProgress, 10)} ${String(phase.sensorProgress).padStart(3, '0')}%`, {
+        col: 1,
+        width: widget.cols - 2,
+        className: 'telemetry-amber',
+        opacity: 0.9 - phase.detail * 0.18
+    });
+}
+
+function widgetGridPixel(widget, col, row) {
+    return gridPoint(col, row, widget.cellWidth, widget.cellHeight);
+}
+
+function ekgWaveValue(position, intensity = 1) {
+    const p = ((position % 1) + 1) % 1;
+    const gaussian = (center, width, height) => height * Math.exp(-((p - center) ** 2) / (2 * width * width));
+    return intensity * (
+        gaussian(0.18, 0.035, 0.18) -
+        gaussian(0.36, 0.012, 0.36) +
+        gaussian(0.395, 0.009, 1.6) -
+        gaussian(0.43, 0.014, 0.7) +
+        gaussian(0.68, 0.07, 0.34)
+    );
+}
+
+function ekgLanePoints(widget, row, startCol, endCol, options = {}) {
+    const points = [];
+    const cols = Math.max(1, endCol - startCol);
+    const cycles = options.cycles || 2.4;
+    const intensity = options.intensity || 1;
+    const drift = options.drift || 0;
+    const samples = cols * (options.samplesPerCol || 4);
+    for (let i = 0; i <= samples; i++) {
+        const progress = i / samples;
+        const col = startCol + progress * cols;
+        const wavePosition = progress * cycles + drift;
+        const baselineNoise = Math.sin(progress * Math.PI * 8 + (options.noisePhase || 0)) * (options.noise || 0.035);
+        points.push(widgetGridPixel(widget, col, row - ekgWaveValue(wavePosition, intensity) + baselineNoise));
+    }
+    return points;
+}
+
+function sliceEkgPoints(points, startRatio, endRatio) {
+    const start = Math.max(0, Math.floor(points.length * clampDiagnostic(startRatio)));
+    const end = Math.max(start + 2, Math.ceil(points.length * clampDiagnostic(endRatio)));
+    return points.slice(start, Math.min(points.length, end));
+}
+
+function renderEkgRevealSegment(layer, points, startRatio, endRatio, options = {}) {
+    if (!points?.length) return;
+    const drawSlice = (from, to) => {
+        const segment = sliceEkgPoints(points, from, to);
+        if (segment.length > 1) svgPolyline(layer, segment, options);
+    };
+    if (startRatio < 0) {
+        drawSlice(1 + startRatio, 1);
+        drawSlice(0, endRatio);
         return;
     }
+    drawSlice(startRatio, endRatio);
+}
+
+function spectrometerLevel(col, row, frame, base = 0.58) {
+    const drift = prefersReducedMotion ? 0 : frame * 0.18;
+    const band = Math.sin((col * 0.31) + row * 0.72 - drift) * 0.18;
+    const lowBand = Math.cos(col * 0.13 - row * 0.44 + drift * 0.37) * 0.14;
+    const carrierA = Math.exp(-((col - 16) ** 2) / 8) * (0.38 + Math.sin(frame * 0.06) * 0.16);
+    const carrierB = Math.exp(-((col - 31) ** 2) / 12) * (0.28 + Math.cos(frame * 0.045) * 0.15);
+    const carrierC = Math.exp(-((col - 45) ** 2) / 6) * (0.36 + Math.sin(frame * 0.08 + row) * 0.14);
+    const grain = ((col * 17 + row * 31 + Math.floor(frame / 3) * 13) % 23) / 90;
+    return clampDiagnostic(base + band + lowBand + carrierA + carrierB + carrierC + grain - row * 0.018);
+}
+
+function renderGateScopeDashboardWidget(id, frame, generatorValue, phase) {
+    const widget = createSvgWidget(id, { cols: 58, rows: 14, cellHeight: 10, kind: 'diag-gate-scope' });
+    if (!widget) return;
+    drawDashboardGrid(widget, { className: 'telemetry-green', colStep: 6, rowStep: 3 });
+    svgLabel(widget.labelLayer, 'AMPLITUDE', 1, 2, { className: 'telemetry-dim' });
+    svgLabel(widget.labelLayer, 'TRACE A', 48, 4, { className: 'telemetry-green' });
+    svgLabel(widget.labelLayer, `${(diagnosticLiveValue(73, 18, phase) + Math.sin(frame * 0.18) * 2).toFixed(1)}mV`, 48, 5, { className: 'telemetry-green' });
+    svgLabel(widget.labelLayer, 'TRACE B', 48, 8, { className: 'telemetry-cyan' });
+    svgLabel(widget.labelLayer, `${(-11.8 + Math.sin(frame * 0.12) * 1.1).toFixed(1)}mV`, 48, 9, { className: 'telemetry-cyan' });
+    svgLabel(widget.labelLayer, `SYNC ${statusGet('diagnostic.generator.core', 'LOCKED').toUpperCase().slice(0, 8)}`, 18, 12, { className: 'telemetry-amber' });
+    svgLabel(widget.labelLayer, `RATE ${statusGet('diagnostic.generator.sample_rate', '10.0 kS/s')}`, 37, 12, { className: 'telemetry-dim' });
+
+    const visible = Math.round(mixDiagnostic(10, 42, phase.detail));
+    const load = Math.max(0, Math.min(1, generatorValue / 100));
+    const traceA = [];
+    const traceB = [];
+    for (let i = 0; i < visible; i++) {
+        const col = 5 + i;
+        const t = frame * 0.105 + i * 0.42;
+        const valueA = Math.sin(t) * 0.65 + Math.sin(t * 2.4 + load) * 0.22;
+        const valueB = Math.cos(t * 0.78 + load * 2) * 0.52 + Math.sin(t * 1.8) * 0.16;
+        traceA.push(widgetGridPixel(widget, col, 5.3 - valueA * 2.1));
+        traceB.push(widgetGridPixel(widget, col, 9.1 - valueB * 1.7));
+        if (phase.detail > 0.72 && i % 5 === 0) {
+            svgTextGlyph(widget.glyphLayer, blockGlyph((valueA + 1) / 2), col, Math.round(5.3 - valueA * 2.1), { className: 'telemetry-green', opacity: 0.72 });
+        }
+    }
+    svgPolyline(widget.glyphLayer, traceA, { className: 'telemetry-green telemetry-trace-bold', opacity: 0.62 + phase.detail * 0.3 });
+    svgPolyline(widget.glyphLayer, traceB, { className: 'telemetry-cyan', opacity: 0.48 + phase.detail * 0.3 });
+    const cursorCol = 5 + (frame % Math.max(1, visible));
+    drawSvgGuideLine(widget, cursorCol, 2, cursorCol, 11, { className: 'telemetry-cyan', opacity: 0.12 + phase.detail * 0.12 });
+    svgLabel(widget.labelLayer, 'SAMPLE CURSOR', Math.max(2, cursorCol - 5), 13, { className: 'telemetry-dim', opacity: 0.48 + phase.detail * 0.2 });
+    drawDiagnosticPhaseScan(widget, phase, 'GATE');
+}
+
+function renderBioscanArrayDashboardWidget(id, frame, stats, phase) {
+    const widget = createSvgWidget(id, { cols: 62, rows: 14, cellHeight: 10, kind: 'diag-bioscan-ekg-array' });
+    if (!widget) return;
+    drawDashboardGrid(widget, { className: 'telemetry-green', colStep: 5, rowStep: 3 });
+    const heartRate = Math.round(diagnosticLiveValue(132 + Math.sin(frame * 0.12) * 3, 48, phase));
+    const startCol = 15;
+    const endCol = 50;
+    const lanes = [
+        { label: 'UNIT-01 PULSE', value: `${heartRate} bpm`, row: 3, cls: 'telemetry-green', speed: 0.031, cycles: 2.45, amp: 1.14, drift: 0.04, noise: 0.018 },
+        { label: 'UNIT-02 RESP', value: `${Math.round(16 + Math.sin(frame * 0.055) * 2)} rpm`, row: 6, cls: 'telemetry-cyan', speed: 0.018, cycles: 1.72, amp: 0.78, drift: 0.22, noise: 0.012 },
+        { label: 'UNIT-03 NEURAL', value: `${statusGet('diagnostic.life.neural_mv', '2.8 mV')}`, row: 9, cls: 'telemetry-amber', speed: 0.024, cycles: 2.9, amp: 0.54, drift: 0.43, noise: 0.032 },
+        { label: 'UNIT-04 STRESS', value: `${Math.round(diagnosticLiveValue(74 + Math.sin(frame * 0.07) * 4, 16, phase))}%`, row: 12, cls: 'telemetry-red', speed: 0.021, cycles: 2.1, amp: 0.68, drift: 0.61, noise: 0.022 }
+    ];
+    lanes.forEach((lane, laneIndex) => {
+        svgLabel(widget.labelLayer, lane.label, 2, lane.row - 1, { className: lane.cls });
+        svgLabel(widget.labelLayer, lane.value, 52, lane.row - 1, { className: lane.cls });
+        drawSvgGuideRect(widget, startCol - 1, lane.row - 1.55, endCol - startCol + 2, 2.6, { className: lane.cls, opacity: 0.045 });
+        drawSvgGuideLine(widget, startCol, lane.row, endCol, lane.row, { className: lane.cls, opacity: 0.1 });
+        const points = ekgLanePoints(widget, lane.row, startCol, endCol, {
+            cycles: lane.cycles,
+            intensity: lane.amp,
+            drift: lane.drift,
+            noise: lane.noise,
+            noisePhase: laneIndex * 1.7,
+            samplesPerCol: 5
+        });
+        svgPolyline(widget.glyphLayer, points, { className: `${lane.cls} telemetry-trace-thin telemetry-ekg-trace`, opacity: 0.12 + phase.detail * 0.12 });
+        const reveal = prefersReducedMotion ? 0.86 : (frame * lane.speed + laneIndex * 0.18) % 1;
+        const tail = mixDiagnostic(0.08, 0.18, phase.detail);
+        const active = mixDiagnostic(0.035, 0.065, phase.detail);
+        renderEkgRevealSegment(widget.glyphLayer, points, reveal - tail, reveal, {
+            className: `${lane.cls} telemetry-ekg-trace`,
+            opacity: 0.28 + phase.detail * 0.24
+        });
+        renderEkgRevealSegment(widget.glyphLayer, points, reveal - active, reveal, {
+            className: `${lane.cls} telemetry-trace-bold telemetry-ekg-trace`,
+            opacity: 0.7 + phase.detail * 0.24
+        });
+        const cursorCol = startCol + reveal * (endCol - startCol);
+        drawSvgGuideLine(widget, cursorCol, lane.row - 1.35, cursorCol, lane.row + 1.35, { className: lane.cls, opacity: 0.18 + phase.detail * 0.12 });
+        svgTextGlyph(widget.glyphLayer, '▌', Math.round(cursorCol), lane.row, { className: lane.cls, opacity: 0.52 + phase.detail * 0.28 });
+    });
+    svgLabel(widget.labelLayer, `BIO ${String(stats.lifeCount).padStart(2, '0')} // UNSTABLE ${String(stats.unstableLife).padStart(2, '0')} // UNKNOWN ${String(stats.unknownLife).padStart(2, '0')}`, 2, 13, { className: 'telemetry-amber' });
+    if (phase.detail < 0.98) {
+        const scanCol = Math.round(mixDiagnostic(startCol, endCol, phase.sensorProgress / 100));
+        drawSvgGuideLine(widget, scanCol, 1.4, scanCol, 12.5, { className: 'telemetry-amber', opacity: 0.2 });
+        svgLabel(widget.labelLayer, `ACQ ${String(phase.sensorProgress).padStart(3, '0')}%`, 52, 13, { className: 'telemetry-amber' });
+    }
+}
+
+function renderTacticalRadarDashboardWidget(id, frame, phase) {
+    const widget = createSvgWidget(id, { cols: 60, rows: 16, cellHeight: 9, kind: 'diag-tactical-radar-safe' });
+    if (!widget) return;
+    drawDashboardGrid(widget, { className: 'telemetry-cyan', colStep: 8, rowStep: 4 });
+    const centerCol = 25;
+    const centerRow = 8;
+    [2, 3.5, 5, 6.5].forEach(radius => drawSvgGuideCircle(widget, centerCol, centerRow, radius, { opacity: 0.08 + phase.detail * 0.04, className: 'telemetry-green' }));
+    drawSvgGuideLine(widget, centerCol, 2, centerCol, 14, { opacity: 0.13, className: 'telemetry-green' });
+    drawSvgGuideLine(widget, 8, centerRow, 43, centerRow, { opacity: 0.13, className: 'telemetry-green' });
+    svgLabel(widget.labelLayer, '0', centerCol, 2, { className: 'telemetry-dim', anchor: 'middle' });
+    svgLabel(widget.labelLayer, '90', 44, centerRow, { className: 'telemetry-dim' });
+    svgLabel(widget.labelLayer, '180', centerCol, 14, { className: 'telemetry-dim', anchor: 'middle' });
+    svgLabel(widget.labelLayer, '270', 6, centerRow, { className: 'telemetry-dim' });
+
+    const angle = prefersReducedMotion ? 1.35 : frame * 0.065;
+    const trailGlyphs = '·:+*#';
+    for (let step = 1; step <= Math.round(mixDiagnostic(4, 8, phase.detail)); step++) {
+        const col = centerCol + Math.round(Math.cos(angle) * step * 1.55);
+        const row = centerRow + Math.round(Math.sin(angle) * step * 0.72);
+        if (col > 4 && col < 45 && row > 1 && row < widget.rows - 2) {
+            svgTextGlyph(widget.glyphLayer, trailGlyphs[Math.min(trailGlyphs.length - 1, Math.floor(step / 3))], col, row, { className: 'telemetry-green', opacity: 0.28 + step * 0.04 });
+        }
+    }
+
+    const contacts = [
+        { glyph: '△', angle: -0.98, radius: 5.6, cls: 'telemetry-green', range: '1.2km' },
+        { glyph: '□', angle: -2.45, radius: 4.8, cls: 'telemetry-cyan', range: '2.8km' },
+        { glyph: '◇', angle: 0.34, radius: 5.8, cls: 'telemetry-red', range: '4.1km' },
+        { glyph: '△', angle: 1.92, radius: 4.2, cls: 'telemetry-green', range: '1.7km' },
+        { glyph: '□', angle: 2.72, radius: 6.1, cls: 'telemetry-green', range: '3.3km' },
+        { glyph: '△', angle: 0.9, radius: 6.4, cls: 'telemetry-red', range: '5.8km' }
+    ];
+    contacts.slice(0, Math.max(2, Math.round(mixDiagnostic(2, contacts.length, phase.detail)))).forEach((contact, index) => {
+        const wobble = prefersReducedMotion ? 0 : Math.sin(frame * 0.045 + index) * 0.045;
+        const col = centerCol + Math.round(Math.cos(contact.angle + wobble) * contact.radius * 1.55);
+        const row = centerRow + Math.round(Math.sin(contact.angle + wobble) * contact.radius * 0.72);
+        const contactPulse = contact.cls === 'telemetry-red' ? 0.68 + Math.sin(frame * 0.18 + index) * 0.18 : 0.82 + Math.sin(frame * 0.055 + index) * 0.1;
+        svgTextGlyph(widget.glyphLayer, contact.glyph, col, row, { className: contact.cls, opacity: clampDiagnostic(contactPulse, 0.48, 1) });
+        renderFixedGlyphLine(widget.glyphLayer, 3 + index, `${String(index + 1).padStart(2, '0')} ${contact.glyph} ${contact.range}`, {
+            col: 48,
+            width: 10,
+            className: contact.cls,
+            opacity: 0.92
+        });
+    });
+    svgLabel(widget.labelLayer, 'CONTACTS', 48, 2, { className: 'telemetry-amber' });
+    svgLabel(widget.labelLayer, `CLUTTER ${Math.round(diagnosticLiveValue(28, 4, phase))}%`, 48, 12, { className: 'telemetry-green' });
+    drawDiagnosticPhaseScan(widget, phase, 'RADAR');
+}
+
+function renderSpectrumDashboardWidget(id, frame, networkValue, phase) {
+    const widget = createSvgWidget(id, { cols: 58, rows: 14, cellHeight: 10, kind: 'diag-spectrum-waterfall' });
+    if (!widget) return;
+    drawDashboardGrid(widget, { className: 'telemetry-cyan', colStep: 6, rowStep: 3 });
+    svgLabel(widget.labelLayer, 'FREQ', 2, 2, { className: 'telemetry-dim' });
+    ['10k', '1k', '100', '10', '1'].forEach((label, index) => svgLabel(widget.labelLayer, label, 2, 4 + index * 2, { className: 'telemetry-green' }));
+    const visibleRows = Math.round(mixDiagnostic(2, 9, phase.detail));
+    for (let row = 3; row < 12; row++) {
+        if (row - 2 > visibleRows) continue;
+        for (let col = 6; col < 46; col++) {
+            const carrier = Math.sin((col - 23) * 0.18) * 0.24;
+            const pulse = Math.sin((col + frame * 0.28 - row * 2.1) * 0.4);
+            const isCarrier = [15, 28, 39].includes(col) && (frame + row * 3) % 34 < 17;
+            const spike = isCarrier ? 0.58 : ((col + row + Math.floor(frame / 8)) % 29 === 0 ? 0.34 : 0);
+            const level = clampDiagnostic(networkValue / 130 + carrier + pulse * 0.22 + spike, 0, 1);
+            const cls = level > 0.84 ? 'telemetry-red' : level > 0.66 ? 'telemetry-amber' : level > 0.42 ? 'telemetry-cyan' : 'telemetry-dim';
+            svgTextGlyph(widget.glyphLayer, densityGlyph(level), col, row, { className: cls, opacity: 0.38 + level * 0.52 });
+        }
+    }
+    svgLabel(widget.labelLayer, 'PEAK HOLD', 48, 3, { className: 'telemetry-amber' });
+    ['-20', '-40', '-60', '-80', '-100'].forEach((label, index) => {
+        const cls = index === 0 ? 'telemetry-red' : index === 1 ? 'telemetry-amber' : index === 2 ? 'telemetry-green' : 'telemetry-cyan';
+        svgTextGlyph(widget.glyphLayer, '█', 48, 5 + index, { className: cls, opacity: 0.8 });
+        svgLabel(widget.labelLayer, label, 50, 5 + index, { className: cls });
+    });
+    svgLabel(widget.labelLayer, 'CENTER 1.000 kHz', 18, 13, { className: 'telemetry-green' });
+    drawDiagnosticPhaseScan(widget, phase, 'SPECTRUM');
+}
+
+function renderReactorSyncDashboardWidget(id, frame, values, phase) {
+    const widget = createSvgWidget(id, { cols: 60, rows: 14, cellHeight: 10, kind: 'diag-reactor-control' });
+    if (!widget) return;
+    drawDashboardGrid(widget, { className: 'telemetry-amber', colStep: 5, rowStep: 2 });
+    drawSvgGuideRect(widget, 1, 1, 16, 7, { className: 'telemetry-green', opacity: 0.16 });
+    drawSvgGuideRect(widget, 18, 1, 25, 7, { className: 'telemetry-amber', opacity: 0.16 });
+    drawSvgGuideRect(widget, 45, 1, 13, 7, { className: 'telemetry-cyan', opacity: 0.16 });
+    drawSvgGuideRect(widget, 1, 9, 57, 4, { className: 'telemetry-amber', opacity: 0.12 });
+
+    const output = diagnosticLiveValue(values.output, 18, phase);
+    const pressure = diagnosticLiveValue(2.37 + Math.sin(frame * 0.05) * 0.04, 0.38, phase);
+    const sync = diagnosticLiveValue(values.sync, 21, phase);
+
+    svgLabel(widget.labelLayer, 'REACTOR OUTPUT', 2, 2, { className: 'telemetry-green' });
+    svgLabel(widget.labelLayer, `${output.toFixed(1)}%`, 2, 4, { className: 'telemetry-green', fontSize: 20 });
+    svgLabel(widget.labelLayer, `${statusGet('diagnostic.reactor.unit', 'MW-EQUIV')} ${glyphProgressBar(output, 8)}`, 2, 7, { className: 'telemetry-dim' });
+
+    svgLabel(widget.labelLayer, 'CONTAINMENT PRESSURE', 19, 2, { className: 'telemetry-amber' });
+    svgLabel(widget.labelLayer, `${pressure.toFixed(2)} ATM`, 33, 2, { className: 'telemetry-amber' });
+    const pressureTrace = [];
+    for (let i = 0; i <= 22; i++) {
+        const col = 19 + i;
+        const harmonic = Math.sin(frame * 0.07 + i * 0.62) * 0.9 + Math.sin(frame * 0.025 + i * 0.18) * 0.42;
+        pressureTrace.push(widgetGridPixel(widget, col, 5.3 - harmonic));
+    }
+    drawSvgGuideLine(widget, 19, 5.3, 42, 5.3, { className: 'telemetry-amber', opacity: 0.12 });
+    svgPolyline(widget.glyphLayer, pressureTrace, { className: 'telemetry-amber telemetry-trace-bold', opacity: 0.68 + phase.detail * 0.18 });
+    svgLabel(widget.labelLayer, `NOMINAL ${statusGet('diagnostic.power.nominal_pressure', '3.20 ATM')}`, 22, 7, { className: 'telemetry-dim' });
+
+    svgLabel(widget.labelLayer, 'SYNC STACK', 46, 2, { className: 'telemetry-cyan' });
+    [
+        ['PLL', sync],
+        ['MAG', sync - 6 + Math.sin(frame * 0.06) * 2],
+        ['RIT', values.mainPower + 20],
+        ['BUS', values.reservePower + 36]
+    ].forEach(([label, value], index) => {
+        const safeValue = clampDiagnostic(value / 100, 0.05, 1) * 100;
+        renderFixedGlyphLine(widget.glyphLayer, 4 + index, `${label} ${glyphProgressBar(safeValue, 7)}`, {
+            col: 46,
+            width: 12,
+            className: safeValue < 62 ? 'telemetry-amber' : 'telemetry-green',
+            opacity: 0.82 + phase.detail * 0.12
+        });
+    });
+
+    const tempValue = diagnosticLiveValue(values.mainPower, 8, phase);
+    renderFixedGlyphLine(widget.glyphLayer, 10, `CORE TEMP ${String(statusGet('diagnostic.power.temp', '612C')).padEnd(7, ' ')} 0`, {
+        col: 2,
+        width: 16,
+        className: 'telemetry-amber',
+        opacity: 0.88
+    });
+    for (let col = 19; col <= 45; col++) {
+        const segment = (col - 19) / 26;
+        const active = segment <= tempValue / 100;
+        const cls = segment > 0.82 ? 'telemetry-red' : segment > 0.58 ? 'telemetry-amber' : 'telemetry-green';
+        svgTextGlyph(widget.glyphLayer, active ? '█' : '░', col, 10, { className: active ? cls : 'telemetry-dim', opacity: active ? 0.86 : 0.28 });
+    }
+    svgLabel(widget.labelLayer, '1000', 47, 10, { className: 'telemetry-dim' });
+    renderFixedGlyphLine(widget.glyphLayer, 12, `NEUTRON FLUX ${statusGet('diagnostic.power.flux', '6.21e13 n/cm/s')}  DELTA ${(Math.sin(frame * 0.05) * 0.8 + 0.6).toFixed(1)}%`, {
+        col: 2,
+        width: 54,
+        className: 'telemetry-cyan',
+        opacity: 0.82
+    });
+    for (let col = 3; col < 15; col++) {
+        const level = clampDiagnostic((values.output / 100) * 0.55 + Math.sin(frame * 0.13 + col) * 0.2 + (col - 3) / 22);
+        svgTextGlyph(widget.glyphLayer, blockGlyph(level), col, 8 - Math.round(level * 2), { className: level > 0.8 ? 'telemetry-amber' : 'telemetry-green', opacity: 0.66 });
+    }
+    drawDiagnosticPhaseScan(widget, phase, 'REACTOR');
+}
+
+function tomographyHeight(xNorm, yNorm, frame, phase) {
+    const dx = xNorm - 0.52;
+    const dy = yNorm - 0.52;
+    const radius = Math.sqrt(dx * dx + dy * dy);
+    const angle = Math.atan2(dy, dx);
+    const outward = Math.sin(radius * 31 - frame * 0.09) * (1 - Math.min(1, radius * 1.8));
+    const angular = Math.sin(angle * 4 + frame * 0.035) * 0.28;
+    const peak = Math.exp(-(radius * radius) / 0.035) * 3.1;
+    const ridge = Math.exp(-(((xNorm - 0.28) ** 2) / 0.08 + ((yNorm - 0.68) ** 2) / 0.06)) * 0.95;
+    return (peak + ridge + outward * 0.9 + angular) * phase.detail;
+}
+
+function tomographyClass(yNorm) {
+    const centerDistance = Math.abs(yNorm - 0.52);
+    if (centerDistance < 0.09) return 'telemetry-red';
+    if (centerDistance < 0.2) return 'telemetry-amber';
+    if (centerDistance < 0.34) return 'telemetry-green';
+    return 'telemetry-cyan';
+}
+
+function renderTomographyDashboardWidget(id, frame, phase) {
+    const widget = createSvgWidget(id, { cols: 96, rows: 24, cellHeight: 8.5, kind: 'diag-anomaly-tomography-fluid' });
+    if (!widget) return;
+    drawDashboardGrid(widget, { className: 'telemetry-cyan', colStep: 6, rowStep: 3 });
+    const sliceDepth = Math.round(312 + Math.sin(frame * 0.035) * 18);
+    svgLabel(widget.labelLayer, `FIELD INTENSITY MESH // DEPTH SLICE ${sliceDepth}m`, 2, 2, { className: 'telemetry-amber' });
+    svgLabel(widget.labelLayer, 'INTENSITY', 84, 3, { className: 'telemetry-amber' });
+    svgLabel(widget.labelLayer, 'MAX', 87, 5, { className: 'telemetry-red' });
+    svgLabel(widget.labelLayer, 'MIN', 87, 20, { className: 'telemetry-cyan' });
+
+    const startCol = 7;
+    const startRow = 6;
+    const widthCols = 70;
+    const heightRows = 14;
+    const horizontalLines = Math.max(8, Math.round(mixDiagnostic(8, 28, phase.detail)));
+    const verticalLines = Math.max(8, Math.round(mixDiagnostic(8, 30, phase.detail)));
+
+    for (let rowIndex = 0; rowIndex < horizontalLines; rowIndex++) {
+        const yNorm = rowIndex / Math.max(1, horizontalLines - 1);
+        const points = [];
+        for (let step = 0; step <= 96; step++) {
+            const xNorm = step / 96;
+            const height = tomographyHeight(xNorm, yNorm, frame, phase);
+            const fluidOffset = Math.sin((xNorm - 0.5) * 8 + frame * 0.045 + yNorm * 5) * 0.55 * phase.detail;
+            const col = startCol + xNorm * widthCols + (yNorm - 0.5) * 5 + fluidOffset;
+            const row = startRow + yNorm * heightRows - height;
+            points.push(widgetGridPixel(widget, col, row));
+        }
+        svgPolyline(widget.glyphLayer, points, {
+            className: `${tomographyClass(yNorm)} telemetry-trace-thin`,
+            opacity: 0.18 + phase.detail * 0.34
+        });
+    }
+
+    for (let colIndex = 0; colIndex < verticalLines; colIndex++) {
+        const xNorm = colIndex / Math.max(1, verticalLines - 1);
+        const points = [];
+        for (let step = 0; step <= 72; step++) {
+            const yNorm = step / 72;
+            const height = tomographyHeight(xNorm, yNorm, frame, phase);
+            const fluidOffset = Math.cos((yNorm - 0.5) * 7 + frame * 0.04 + xNorm * 6) * 0.45 * phase.detail;
+            const col = startCol + xNorm * widthCols + (yNorm - 0.5) * 5 + fluidOffset;
+            const row = startRow + yNorm * heightRows - height;
+            points.push(widgetGridPixel(widget, col, row));
+        }
+        const centerDistance = Math.abs(xNorm - 0.52);
+        svgPolyline(widget.glyphLayer, points, {
+            className: `${centerDistance < 0.16 ? 'telemetry-amber' : 'telemetry-cyan'} telemetry-trace-thin`,
+            opacity: 0.12 + phase.detail * 0.2
+        });
+    }
+
+    const hotPath = [];
+    for (let i = 0; i <= 72; i++) {
+        const angle = (Math.PI * 2 * i) / 72;
+        const pulse = 1 + Math.sin(frame * 0.06 + angle * 3) * 0.12;
+        const col = startCol + widthCols * 0.52 + Math.cos(angle) * 8.8 * pulse;
+        const row = startRow + heightRows * 0.52 + Math.sin(angle) * 2.3 * pulse - Math.sin(frame * 0.06) * 0.5;
+        hotPath.push(widgetGridPixel(widget, col, row));
+    }
+    svgPolyline(widget.glyphLayer, hotPath, { className: 'telemetry-red telemetry-trace-bold', opacity: 0.2 + phase.detail * 0.24 });
+    const sliceCol = 8 + Math.round(((Math.sin(frame * 0.035) + 1) / 2) * 64);
+    drawSvgGuideLine(widget, sliceCol, 5, sliceCol + 5, 18, { className: 'telemetry-amber', opacity: 0.16 + phase.detail * 0.06 });
+
+    [
+        ['█', 'telemetry-red'],
+        ['█', 'telemetry-amber'],
+        ['▓', 'telemetry-amber'],
+        ['▓', 'telemetry-green'],
+        ['▒', 'telemetry-green'],
+        ['▒', 'telemetry-cyan'],
+        ['░', 'telemetry-cyan'],
+        ['·', 'telemetry-dim']
+    ].forEach(([glyph, cls], index) => {
+        svgTextGlyph(widget.glyphLayer, glyph, 86, 6 + index * 2, { className: cls, opacity: 0.92 });
+        svgTextGlyph(widget.glyphLayer, glyph, 87, 6 + index * 2, { className: cls, opacity: 0.78 });
+    });
+    svgLabel(widget.labelLayer, `GRID ${Math.round(diagnosticLiveValue(128, 24, phase))}x${Math.round(diagnosticLiveValue(128, 24, phase))}`, 65, 20, { className: 'telemetry-green' });
+    svgLabel(widget.labelLayer, `DRIFT +${(diagnosticLiveValue(2.1, 0.2, phase)).toFixed(1)}`, 2, 20, { className: 'telemetry-amber' });
+    drawDiagnosticPhaseScan(widget, phase, 'TOMOGRAPHY');
+}
+
+function renderDataFabricDashboardWidget(id, frame, securityValue, phase) {
+    const widget = createSvgWidget(id, { cols: 64, rows: 14, cellHeight: 10, kind: 'diag-entity-noise-spectrometer' });
+    if (!widget) return;
+    drawDashboardGrid(widget, { className: 'telemetry-cyan', colStep: 6, rowStep: 3 });
+    svgLabel(widget.labelLayer, 'FREQ', 2, 2, { className: 'telemetry-dim' });
+    svgLabel(widget.labelLayer, 'PEAK HOLD', 52, 2, { className: 'telemetry-amber' });
+    ['10k', '2k', '500', '100', '25', '5'].forEach((label, index) => svgLabel(widget.labelLayer, label, 2, 3 + index * 1.55, { className: 'telemetry-green' }));
+
+    const visibleRows = Math.round(mixDiagnostic(3, 10, phase.detail));
+    const peakPoints = [];
+    for (let row = 3; row <= 12; row++) {
+        if (row - 2 > visibleRows) continue;
+        for (let col = 7; col <= 49; col++) {
+            const level = spectrometerLevel(col, row, frame, diagnosticLiveValue(securityValue / 125, 0.12, phase));
+            const cls = level > 0.88 ? 'telemetry-red' : level > 0.7 ? 'telemetry-amber' : level > 0.48 ? 'telemetry-green' : level > 0.28 ? 'telemetry-cyan' : 'telemetry-dim';
+            svgTextGlyph(widget.glyphLayer, densityGlyph(level), col, row, { className: cls, opacity: 0.34 + level * 0.55 });
+            if (row === 4 && col % 2 === 0) {
+                const peakRow = 11.5 - level * 7.5;
+                peakPoints.push(widgetGridPixel(widget, col, peakRow));
+            }
+        }
+    }
+    svgPolyline(widget.glyphLayer, peakPoints, { className: 'telemetry-amber telemetry-trace-thin', opacity: 0.48 + phase.detail * 0.25 });
+
+    [16, 31, 45].forEach((col, index) => {
+        const pulse = 0.65 + Math.sin(frame * (0.07 + index * 0.012)) * 0.25;
+        drawSvgGuideLine(widget, col, 3, col, 12, { className: index === 2 ? 'telemetry-red' : 'telemetry-cyan', opacity: 0.16 + pulse * 0.12 });
+        svgTextGlyph(widget.glyphLayer, index === 2 ? '◆' : '●', col, 3, { className: index === 2 ? 'telemetry-red' : 'telemetry-cyan', opacity: pulse });
+    });
+
+    [
+        ['-20', 'telemetry-red'],
+        ['-40', 'telemetry-amber'],
+        ['-60', 'telemetry-green'],
+        ['-80', 'telemetry-cyan'],
+        ['-100', 'telemetry-dim']
+    ].forEach(([label, cls], index) => {
+        svgTextGlyph(widget.glyphLayer, '█', 53, 4 + index, { className: cls, opacity: 0.86 });
+        svgLabel(widget.labelLayer, label, 55, 4 + index, { className: cls });
+    });
+    svgLabel(widget.labelLayer, `CLUTTER ${Math.round(diagnosticLiveValue(28, 5, phase))}%`, 52, 11, { className: 'telemetry-green' });
+    svgLabel(widget.labelLayer, `REF ${statusGet('diagnostic.security.reference', '-20 dBm')}`, 52, 12, { className: 'telemetry-cyan' });
+    svgLabel(widget.labelLayer, 'CENTER 1.000 kHz', 18, 13, { className: 'telemetry-green' });
+    drawDiagnosticPhaseScan(widget, phase, 'NOISE');
+}
+
+function renderLiveEventDashboardWidget(id, frame, values, phase) {
+    const widget = createSvgWidget(id, { cols: 58, rows: 14, cellHeight: 10, kind: 'diag-event-log' });
+    if (!widget) return;
+    drawDashboardGrid(widget, { className: 'telemetry-green', colStep: 7, rowStep: 3 });
+    drawSvgGuideRect(widget, 1, 1, 49, 9, { className: 'telemetry-green', opacity: 0.12 });
+    drawSvgGuideRect(widget, 51, 1, 6, 11, { className: 'telemetry-amber', opacity: 0.12 });
+    const bootLines = [
+        ['SYS', 'Sensor bus precharge accepted.', 'OK'],
+        ['NET', 'Dead-net relay handshake pending...', 'LOCK'],
+        ['SEC', 'Perimeter lattice warming.', 'WARN'],
+        ['BIO', 'Crew vital channels acquiring.', 'INFO'],
+        ['REAC', 'Flux chamber lining up.', 'OK'],
+        ['ANOM', 'Tomography solver idle.', 'INFO']
+    ];
+    const liveLines = [
+        ['SYS', 'Gate stabilization field nominal.', 'OK'],
+        ['NET', 'Dead-net carrier packet reroute.', 'LOCK'],
+        ['SEC', 'Perimeter breach attempt Sector 04.', 'WARN'],
+        ['BIO', `Unknown ${String(values.unknownLife).padStart(2, '0')} // unstable ${String(values.unstableLife).padStart(2, '0')}.`, 'INFO'],
+        ['REAC', 'Neutron flux variance within limits.', 'OK'],
+        ['ANOM', 'Anomaly spike at depth slice 312m.', 'ALERT'],
+        ['PSY', 'Psych-AI resonance drift +0.7%.', 'WARN'],
+        ['SEC', 'Countermeasures deployed.', 'OK'],
+        ['GATE', 'Containment ritual drift corrected.', 'OK'],
+        ['NET', 'Packet decay rising on dead-net leg.', 'WARN'],
+        ['CORE', 'Archive bus transaction verified.', 'OK']
+    ];
+    const lines = phase.detail < 0.7 ? bootLines : liveLines;
+    const offset = prefersReducedMotion ? 0 : Math.floor(frame / 16) % lines.length;
+    const activeRow = prefersReducedMotion ? -1 : Math.floor((frame % 16) / 2);
+    for (let index = 0; index < 8; index++) {
+        const entry = lines[(offset + index) % lines.length];
+        const seconds = String((10 + offset * 3 + index * 2) % 60).padStart(2, '0');
+        const cls = entry[2] === 'ALERT' ? 'telemetry-red' : entry[2] === 'WARN' ? 'telemetry-amber' : entry[2] === 'LOCK' ? 'telemetry-cyan' : 'telemetry-green';
+        if (index === activeRow) {
+            drawSvgGuideRect(widget, 1, 2 + index - 0.45, 49, 1, { className: cls, opacity: 0.08 + phase.detail * 0.08 });
+        }
+        svgTextGlyph(widget.glyphLayer, entry[2] === 'ALERT' ? '◆' : entry[2] === 'WARN' ? '◇' : '●', 2, 2 + index, {
+            className: cls,
+            opacity: index === activeRow ? 1 : 0.72
+        });
+        renderFixedGlyphLine(widget.glyphLayer, 2 + index, `03:17:${seconds} [${entry[0]}] ${entry[1]}`, {
+            col: 4,
+            width: 45,
+            className: cls,
+            opacity: index === activeRow ? 0.98 : 0.48 + phase.detail * 0.34
+        });
+        svgLabel(widget.labelLayer, `[${entry[2]}]`, 51, 2 + index, { className: cls });
+    }
+
+    svgLabel(widget.labelLayer, 'PKT', 2, 11, { className: 'telemetry-cyan' });
+    svgLabel(widget.labelLayer, 'ERR', 2, 12, { className: 'telemetry-red' });
+    for (let col = 7; col < 48; col++) {
+        const packet = (col + frame) % 9 === 0;
+        const error = (col * 3 + Math.floor(frame / 2)) % 37 === 0;
+        svgTextGlyph(widget.glyphLayer, packet ? '●' : '·', col, 11, { className: packet ? 'telemetry-cyan' : 'telemetry-dim', opacity: packet ? 0.9 : 0.24 });
+        svgTextGlyph(widget.glyphLayer, error ? '◆' : '·', col, 12, { className: error ? 'telemetry-red' : 'telemetry-dim', opacity: error ? 0.92 : 0.16 });
+    }
+    for (let row = 2; row <= 10; row++) {
+        const level = clampDiagnostic(0.48 + Math.sin(frame * 0.14 + row * 0.8) * 0.38);
+        const active = level > (10 - row) / 8;
+        svgTextGlyph(widget.glyphLayer, active ? '█' : '░', 55, row, { className: active ? (row < 4 ? 'telemetry-red' : row < 6 ? 'telemetry-amber' : 'telemetry-green') : 'telemetry-dim', opacity: active ? 0.78 : 0.26 });
+    }
+    svgLabel(widget.labelLayer, `AUTO-SCROLL ${phase.mode === 'live' ? 'ON' : 'CAL'}`, 1, 13, { className: 'telemetry-amber' });
+    drawDiagnosticPhaseScan(widget, phase, 'EVENTS');
+}
+
+function renderSignalIntegrityDashboardWidget(id, frame, integrityValue, phase) {
+    const widget = createSvgWidget(id, { cols: 42, rows: 12, cellHeight: 10, kind: 'diag-signal-strength-bars' });
+    if (!widget) return;
+    drawDashboardGrid(widget, { className: 'telemetry-green', colStep: 6, rowStep: 3 });
+    const value = clampDiagnostic(diagnosticLiveValue(integrityValue + Math.sin(frame * 0.08) * 0.7, 18, phase), 0, 100);
+    const dbValue = -96 + value * 0.72;
+    const snr = diagnosticLiveValue(31 + Math.sin(frame * 0.06) * 2.4, 4, phase);
+    const jitter = diagnosticLiveValue(0.8 + Math.sin(frame * 0.09) * 0.2, 6.4, phase);
+
+    svgLabel(widget.labelLayer, 'CARRIER LOCK', 2, 2, { className: 'telemetry-amber' });
+    svgLabel(widget.labelLayer, `${dbValue.toFixed(1)} dBm`, 31, 2, { className: value < 72 ? 'telemetry-amber' : 'telemetry-green' });
+    renderFixedGlyphLine(widget.glyphLayer, 4, `PWR ${glyphProgressBar(value, 24)}`, { col: 2, width: 34, className: value < 72 ? 'telemetry-amber' : 'telemetry-green', opacity: 0.9 });
+    const markerCol = 7 + Math.round((value / 100) * 23);
+    svgTextGlyph(widget.glyphLayer, '▲', markerCol, 5, { className: value < 72 ? 'telemetry-amber' : 'telemetry-cyan', opacity: 0.9 });
+
+    renderFixedGlyphLine(widget.glyphLayer, 7, `SNR ${glyphProgressBar(snr * 2.2, 16)} ${snr.toFixed(1)}dB`, { col: 2, width: 31, className: 'telemetry-cyan', opacity: 0.86 });
+    renderFixedGlyphLine(widget.glyphLayer, 9, `JIT ${glyphProgressBar(Math.max(0, 100 - jitter * 10), 16)} ${jitter.toFixed(1)}ms`, { col: 2, width: 31, className: jitter > 3 ? 'telemetry-amber' : 'telemetry-green', opacity: 0.86 });
+
+    for (let col = 3; col <= 36; col++) {
+        const pulse = (col + frame) % 11 === 0;
+        const drop = (col * 5 + Math.floor(frame / 2)) % 41 === 0;
+        svgTextGlyph(widget.glyphLayer, drop ? '◆' : pulse ? '●' : '·', col, 11, {
+            className: drop ? 'telemetry-red' : pulse ? 'telemetry-cyan' : 'telemetry-dim',
+            opacity: drop ? 0.92 : pulse ? 0.86 : 0.22
+        });
+    }
+    svgLabel(widget.labelLayer, 'RX PULSE RAIL', 2, 10, { className: 'telemetry-dim' });
+    if (phase.detail < 0.98) {
+        const scanCol = Math.round(mixDiagnostic(2, widget.cols - 3, phase.sensorProgress / 100));
+        drawSvgGuideLine(widget, scanCol, 2, scanCol, 10, { className: 'telemetry-amber', opacity: 0.22 });
+        svgLabel(widget.labelLayer, `ACQ ${String(phase.sensorProgress).padStart(3, '0')}%`, 29, 10, { className: 'telemetry-amber' });
+    }
+}
+
+function renderUplinkDashboardWidget(id, frame, values, phase) {
+    const widget = createSvgWidget(id, { cols: 48, rows: 14, cellHeight: 10, kind: 'diag-uplink-processor' });
+    if (!widget) return;
+    drawDashboardGrid(widget, { className: 'telemetry-cyan', colStep: 6, rowStep: 4 });
+    drawSvgGuideRect(widget, 1, 1, 46, 5, { className: 'telemetry-cyan', opacity: 0.12 });
+    drawSvgGuideRect(widget, 1, 7, 46, 2, { className: 'telemetry-green', opacity: 0.12 });
+    drawSvgGuideRect(widget, 1, 10, 28, 3, { className: 'telemetry-cyan', opacity: 0.12 });
+    drawSvgGuideRect(widget, 32, 10, 15, 3, { className: 'telemetry-green', opacity: 0.12 });
+    svgLabel(widget.labelLayer, 'WAVEFORM STRIP', 2, 2, { className: 'telemetry-cyan' });
+    const waveform = [];
+    for (let i = 0; i < Math.round(mixDiagnostic(8, 38, phase.detail)); i++) {
+        const col = 4 + i;
+        const noise = Math.sin(frame * 0.28 + i * 1.7) * 0.7 + Math.sin(frame * 0.1 + i * 0.34) * 0.45;
+        waveform.push(widgetGridPixel(widget, col, 4.4 + noise));
+    }
+    svgPolyline(widget.glyphLayer, waveform, { className: 'telemetry-cyan telemetry-trace-bold', opacity: 0.58 + phase.detail * 0.28 });
+    renderFixedGlyphLine(widget.glyphLayer, 8, `PHASE LOCK ${glyphProgressBar(diagnosticLiveValue(values.sync, 12, phase), 18)} ${values.sync > 85 ? 'LOCKED' : 'DRIFT'}`, {
+        col: 2,
+        width: 42,
+        className: values.sync > 85 ? 'telemetry-green' : 'telemetry-amber',
+        opacity: 0.9
+    });
+    const processorLoad = diagnosticLiveValue(43 + Math.sin(frame * 0.12) * 4, 9, phase);
+    svgLabel(widget.labelLayer, 'PROCESSOR LOAD', 2, 11, { className: 'telemetry-cyan' });
+    svgLabel(widget.labelLayer, `${Math.round(processorLoad)}%`, 23, 11, { className: 'telemetry-cyan', fontSize: 18 });
+    const spinCenterCol = 39;
+    const spinCenterRow = 11.5;
+    for (let i = 0; i < 12; i++) {
+        const angle = (i / 12) * Math.PI * 2 + (prefersReducedMotion ? 0 : frame * 0.09);
+        const col = spinCenterCol + Math.round(Math.cos(angle) * 4);
+        const row = spinCenterRow + Math.round(Math.sin(angle) * 2);
+        svgTextGlyph(widget.glyphLayer, '·', col, row, { className: 'telemetry-green', opacity: 0.22 + (i / 12) * 0.62 });
+    }
+    svgLabel(widget.labelLayer, 'SCAN', 35, 13, { className: 'telemetry-green' });
+    drawDiagnosticPhaseScan(widget, phase, 'UPLINK');
+}
+
+function renderSideGlyphTelemetry(frame = 0) {
+    const sideDiagnostic = createSvgWidget('sideDiagnosticTelemetry', { cols: 28, rows: 6, kind: 'side-diagnostic' });
+    if (sideDiagnostic) {
+        renderWidgetFrame(sideDiagnostic, { className: AppState.networkOnline ? 'telemetry-green' : 'telemetry-red' });
+        svgLabel(sideDiagnostic.labelLayer, 'SYS BUS', 1, 1, { className: 'telemetry-amber' });
+        for (let col = 1; col < 27; col++) {
+            const level = (Math.sin(frame * 0.2 + col * 0.43) + 1) / 2;
+            svgTextGlyph(sideDiagnostic.glyphLayer, blockGlyph(level), col, 4 - Math.round(level * 2), { className: AppState.networkOnline ? 'telemetry-green' : 'telemetry-red', opacity: AppState.networkOnline ? 0.86 : 0.46 });
+        }
+    }
+
+    const sideFacility = createSvgWidget('sideFacilityTelemetry', { cols: 28, rows: 6, kind: 'side-facility' });
+    if (sideFacility) {
+        renderWidgetFrame(sideFacility, { className: AppState.networkOnline ? 'telemetry-amber' : 'telemetry-red' });
+        const nodeRows = [2, 3, 2, 4];
+        const nodeCols = [5, 13, 21, 13];
+        [[0, 1], [1, 2], [1, 3]].forEach(([a, b]) => drawSvgGuideLine(sideFacility, nodeCols[a], nodeRows[a], nodeCols[b], nodeRows[b], { className: 'telemetry-amber', opacity: 0.18 }));
+        nodeCols.forEach((col, index) => svgTextGlyph(sideFacility.glyphLayer, index === 3 ? '◇' : '□', col, nodeRows[index], { className: index === 3 ? 'telemetry-red' : 'telemetry-amber' }));
+        const packetCol = 5 + ((frame % 16));
+        svgTextGlyph(sideFacility.glyphLayer, AppState.networkOnline ? '●' : '◆', packetCol, packetCol > 13 ? 3 : 2, { className: AppState.networkOnline ? 'telemetry-green' : 'telemetry-red', opacity: AppState.networkOnline ? 0.9 : 0.45 });
+    }
+}
+
+function renderDiagnosticDashboard() {
+    const frame = diagnosticFrame;
+    const phaseInfo = getDiagnosticPhase(frame);
+    const phase = prefersReducedMotion ? 48 : frame;
+    const meta = phaseInfo.mode === 'boot'
+        ? `SCAN BUS: READING SENSORS ${asciiBar(phaseInfo.sensorProgress, 12)}`
+        : phaseInfo.mode === 'transition'
+            ? `SCAN BUS: RESOLVING LIVE TELEMETRY ${asciiBar(phaseInfo.sensorProgress, 12)}`
+            : `SCAN BUS: LIVE DASHBOARD // FRAME ${String(frame).padStart(4, '0')}`;
+    diagText('diagnosticMeta', meta);
 
     const network = statusNumber('diagnostic.network.level', 69 + Math.round(Math.sin(phase * 0.31) * 5), 0, 100);
     const security = statusNumber('diagnostic.security.level', 81 + Math.round(Math.sin(phase * 0.18) * 4), 0, 100);
@@ -603,94 +1811,75 @@ function renderDiagnosticDashboard() {
     const lifeCount = Math.round(statusNumber('diagnostic.life.known', 14 + (phase % 9 === 0 ? 1 : 0), 0, 99));
     const unstableLife = Math.round(statusNumber('diagnostic.life.unstable', 2, 0, 99));
     const unknownLife = Math.round(statusNumber('diagnostic.life.unknown', 3 + (phase % 11 === 0 ? 1 : 0), 0, 99));
+    const reactorOutput = statusNumber('diagnostic.reactor.output', 87.6 + Math.sin(phase * 0.12) * 1.8, 0, 100);
+    const syncIntegrity = statusNumber('diagnostic.sync.integrity', 94.3 + Math.sin(phase * 0.09) * 1.1, 0, 100);
+    const signalIntegrity = statusNumber('diagnostic.signal.integrity', 91.2 + Math.sin(phase * 0.08) * 1.4, 0, 100);
 
     const networkStatus = statusGet('diagnostic.network.status', 'DISCONNECTED').toUpperCase();
-    diagCardState('diagNetworkCard', statusState('diagnostic.network.state', 'alert'));
-    diagText('diagNetworkStatus', networkStatus);
-    diagText('diagNetwork', statusBlock('diagnostic.network', [
-        `FACILITY BUS : LOCAL ONLY ${spinner(phase)}`,
-        `LOCAL MESH   : ${asciiBar(network, 18)}`,
-        `SURFACE NET  : ${statusGet('diagnostic.network.surface', 'DISCONNECTED')}`,
-        `EXT RELAY    : ${statusGet('diagnostic.network.relay', 'FAILED / NO CARRIER')}`,
-        `DRONE UPLINK : ${statusGet('diagnostic.network.drone', 'DEGRADED 77%')}`
-    ], phase));
+    diagCardState('diagNetworkCard', phaseInfo.mode === 'live' ? statusState('diagnostic.network.state', 'warn') : 'ok');
+    diagText('diagNetworkStatus', diagnosticStatusText(networkStatus === 'DISCONNECTED' ? 'NOISE' : networkStatus, phaseInfo, 'SCAN', 'SYNC'));
+    renderSpectrumDashboardWidget('diagNetwork', phase, network, phaseInfo);
 
-    const securityStatus = statusGet('diagnostic.security.status', 'ARMED').toUpperCase();
-    diagCardState('diagSecurityCard', statusState('diagnostic.security.state', 'warn'));
-    diagText('diagSecurityStatus', securityStatus);
-    diagText('diagSecurity', statusBlock('diagnostic.security', [
-        `PERIMETER    : ${asciiBar(security, 18)}`,
-        `SEC PROTOCOL : ${statusGet('diagnostic.security.protocol', 'ENGAGED')}`,
-        `AUTO DEFENSE : ${statusGet('diagnostic.security.defense', 'ARMED')}`,
-        `INTRUSION    : ${statusGet('diagnostic.security.intrusion', 'ARMED / NO BREACH')}`,
-        `VAULT DOORS  : ${statusGet('diagnostic.security.vault', 'SEALED / SERVO-3 SLOW')}`
-    ], phase));
+    const securityStatus = statusGet('diagnostic.security.status', 'NOISE').toUpperCase();
+    diagCardState('diagSecurityCard', phaseInfo.mode === 'live' ? statusState('diagnostic.security.state', 'warn') : 'ok');
+    diagText('diagSecurityStatus', diagnosticStatusText(securityStatus === 'ARMED' ? 'NOISE' : securityStatus, phaseInfo, 'SCAN', 'PEAK'));
+    renderDataFabricDashboardWidget('diagSecurity', phase, security, phaseInfo);
 
     const outpostStatus = statusGet('diagnostic.outposts.status', 'LINK DEGRADED').toUpperCase();
-    diagCardState('diagOutpostCard', statusState('diagnostic.outposts.state', 'warn'));
-    diagText('diagOutpostStatus', outpostStatus);
-    diagText('diagOutpost', statusBlock('diagnostic.outposts', [
-        `LINK SWEEP   : ${asciiSweep(phase, 22)}`,
-        `DRONE UPLINK : ${statusGet('diagnostic.outposts.drone', 'DEGRADED 77%')}`,
-        `MESH NETWORK : ${statusGet('diagnostic.outposts.mesh', 'WEAK SIGNAL')}`,
-        `OUTPOST-01   : ${statusGet('diagnostic.outposts.outpost1', 'PARTIAL MESH  188ms')}`,
-        `OUTPOST-04   : ${statusGet('diagnostic.outposts.outpost4', 'NO CARRIER    ----')}`
-    ], phase));
+    diagCardState('diagOutpostCard', phaseInfo.mode === 'live' ? statusState('diagnostic.outposts.state', 'warn') : 'ok');
+    diagText('diagOutpostStatus', diagnosticStatusText(outpostStatus, phaseInfo, 'PING', 'SWEEP'));
+    renderTacticalRadarDashboardWidget('diagOutpost', phase, phaseInfo);
 
     const generatorStatus = statusGet('diagnostic.generator.status', 'SERVICE DUE').toUpperCase();
-    diagCardState('diagGeneratorCard', statusState('diagnostic.generator.state', 'warn'));
-    diagText('diagGeneratorStatus', generatorStatus);
-    diagText('diagGenerator', statusBlock('diagnostic.generator', [
-        `CORE-A ${spinner(phase)}      : ${statusGet('diagnostic.generator.core', 'RUNNING HOT')}`,
-        `TURBINE RPM  : ${asciiBar(generator, 18)}`,
-        `TEMP         : ${statusGet('diagnostic.generator.temp', '451K ABOVE NOMINAL')}`,
-        `LOAD BUS     : ${asciiSweep(phase + 6, 22)}`,
-        `COOLANT      : ${statusGet('diagnostic.generator.coolant', 'FLOW LOW / FILTER CLOG')}`
-    ], phase));
+    diagCardState('diagGeneratorCard', phaseInfo.mode === 'live' ? statusState('diagnostic.generator.state', 'warn') : 'ok');
+    diagText('diagGeneratorStatus', diagnosticStatusText(generatorStatus, phaseInfo, 'CAL', 'LOCK'));
+    renderGateScopeDashboardWidget('diagGenerator', phase, generator, phaseInfo);
 
     const powerStatus = statusGet('diagnostic.power.status', 'LOW RESERVE').toUpperCase();
-    diagCardState('diagPowerCard', statusState('diagnostic.power.state', 'warn'));
-    diagText('diagPowerStatus', powerStatus);
-    diagText('diagPower', statusBlock('diagnostic.power', [
-        `MAIN GRID    : ${asciiBar(mainPower, 20)}`,
-        `RESERVE CELL : ${asciiBar(reservePower, 20)}`,
-        `BAT-A        : ${statusGet('diagnostic.power.bat_a', `[${'#'.repeat(4)}${'-'.repeat(6)}] 3.2h`)}`,
-        `BAT-B        : ${statusGet('diagnostic.power.bat_b', `[${'#'.repeat(3)}${'-'.repeat(7)}] 2.6h`)}`,
-        `CAPACITOR    : ${statusGet('diagnostic.power.capacitor', `UNEVEN CHARGE ${'.'.repeat((phase % 3) + 1).padEnd(3, ' ')}`)}`
-    ], phase));
+    diagCardState('diagPowerCard', phaseInfo.mode === 'live' ? statusState('diagnostic.power.state', 'warn') : 'ok');
+    diagText('diagPowerStatus', diagnosticStatusText(powerStatus, phaseInfo, 'BUS', 'LOAD'));
+    renderReactorSyncDashboardWidget('diagPower', phase, { output: reactorOutput, sync: syncIntegrity, mainPower, reservePower }, phaseInfo);
 
     const alarmStatus = statusGet('diagnostic.alarm.status', 'DIS DEGRADED').toUpperCase();
-    diagCardState('diagAlarmCard', statusState('diagnostic.alarm.state', 'malfunction'));
-    diagText('diagAlarmStatus', alarmStatus);
-    diagText('diagAlarm', statusBlock('diagnostic.alarm', [
-        `STATION ALARM: ${statusGet('diagnostic.alarm.station', 'AMBER MAINTENANCE')}`,
-        `DIS SENSORS  : ${statusGet('diagnostic.alarm.dis', 'DEGRADED / 02 BLIND')}`,
-        `BIOHAZARD    : ${statusGet('diagnostic.alarm.biohazard', 'CLEAR / SAMPLE LOCK DUE')}`,
-        `CONTAINMENT  : ${statusGet('diagnostic.alarm.containment', 'ZONE C-12 SEAL DRIFT')}`,
-        `SIREN BUS    : ${asciiSweep(phase + 10, 22)}`
-    ], phase));
+    diagCardState('diagAlarmCard', phaseInfo.mode === 'live' ? statusState('diagnostic.alarm.state', 'warn') : 'ok');
+    diagText('diagAlarmStatus', diagnosticStatusText(alarmStatus === 'DIS DEGRADED' ? 'ELEVATED' : alarmStatus, phaseInfo, 'SOLVE', 'MESH'));
+    renderTomographyDashboardWidget('diagAlarm', phase, phaseInfo);
 
     const lifeStatus = statusGet('diagnostic.life.status', `${unknownLife} UNKNOWN`).toUpperCase();
-    diagCardState('diagLifeCard', statusState('diagnostic.life.state', 'alert'));
-    diagText('diagLifeStatus', lifeStatus);
-    diagText('diagLife', statusBlock('diagnostic.life', [
-        `BIO COUNT    : ${String(lifeCount).padStart(2, '0')} CONFIRMED / ${String(unstableLife).padStart(2, '0')} UNSTABLE / ${String(unknownLife).padStart(2, '0')} UNKNOWN`,
-        `HEARTBEAT    : ${heartbeat(phase)}`,
-        lifeSignMap(phase)
-    ], phase));
+    diagCardState('diagLifeCard', phaseInfo.mode === 'live' ? statusState('diagnostic.life.state', 'alert') : 'ok');
+    diagText('diagLifeStatus', diagnosticStatusText(lifeStatus, phaseInfo, 'BIO', 'SYNC'));
+    renderBioscanArrayDashboardWidget('diagLife', phase, { lifeCount, unstableLife, unknownLife }, phaseInfo);
+
+    diagCardState('diagEventsCard', phaseInfo.mode === 'live' ? statusState('diagnostic.alarm.state', 'warn') : 'ok');
+    diagText('diagEventsStatus', diagnosticStatusText('FEED', phaseInfo, 'BOOT', 'TAIL'));
+    renderLiveEventDashboardWidget('diagEvents', phase, { lifeCount, unstableLife, unknownLife }, phaseInfo);
+
+    diagCardState('diagIntegrityCard', signalIntegrity < 72 ? 'alert' : signalIntegrity < 86 ? 'warn' : 'ok');
+    diagText('diagIntegrityStatus', diagnosticStatusText(`${signalIntegrity.toFixed(1)}%`, phaseInfo, 'LOCK', 'CAL'));
+    renderSignalIntegrityDashboardWidget('diagIntegrity', phase, signalIntegrity, phaseInfo);
+
+    diagCardState('diagUplinkCard', phaseInfo.mode === 'live' ? statusState('diagnostic.network.state', 'warn') : 'ok');
+    diagText('diagUplinkStatus', diagnosticStatusText(syncIntegrity > 88 ? 'LOCKED' : 'DRIFT', phaseInfo, 'PROC', 'SYNC'));
+    renderUplinkDashboardWidget('diagUplink', phase, { sync: syncIntegrity }, phaseInfo);
 
     const defaultTicker = `FACILITY PASS: EXTERNAL COMMS DOWN // DEFENSE ARMED // DIS SENSORS DEGRADED // UNKNOWN LIFE SIGNS ${spinner(phase)} ${asciiSweep(phase, 20)}`;
-    diagText('diagnosticTicker', statusInterpolate(statusGet('diagnostic.ticker', defaultTicker), phase));
+    const phaseTicker = phaseInfo.mode === 'boot'
+        ? `BASE STATUS BOOT ${['◢', '◐', '◒', '◣'][frame % 4]} READING SENSOR ARRAYS // WIREFRAME SOLVER PRECHARGE`
+        : phaseInfo.mode === 'transition'
+            ? `SENSOR BOOT COMPLETE // BLENDING CALIBRATION GRAPHS INTO LIVE TELEMETRY ${asciiSweep(phase, 18)}`
+            : statusInterpolate(statusGet('diagnostic.ticker', defaultTicker), phase);
+    diagText('diagnosticTicker', phaseTicker);
+    renderSideGlyphTelemetry(phase);
 }
 
 function runDiagnosticLoop(timestamp = 0) {
     if (!diagnosticActive || !AppState.networkOnline) return;
-    const interval = effectsFrameMs(135, 220, 260);
+    const interval = effectsFrameMs(45, 90, 140);
     if (!diagnosticLastRender || timestamp - diagnosticLastRender >= interval) {
         diagnosticLastRender = timestamp;
         diagnosticFrame++;
         renderDiagnosticDashboard();
-        if (diagnosticFrame < 16 && diagnosticFrame % 3 === 0) AudioEngine.keyClick();
+        if (diagnosticFrame < 32 && diagnosticFrame % 5 === 0) AudioEngine.keyClick();
     }
     diagnosticAnimFrame = requestAnimationFrame(runDiagnosticLoop);
 }
@@ -704,7 +1893,7 @@ function showDiagnosticDashboard() {
     if (!overlay || overlay.classList.contains('active')) return;
     diagnosticActive = true;
     setAppState({ activeOverlay: 'diagnostic' }, { resetSelection: false });
-    diagnosticFrame = prefersReducedMotion ? 24 : 0;
+    diagnosticFrame = prefersReducedMotion ? 48 : 0;
     diagnosticLastRender = 0;
     overlay.classList.add('active');
     overlay.setAttribute('aria-hidden', 'false');
@@ -886,411 +2075,64 @@ function facilityZoneReadoutLine(zone) {
     return `${label} ${status} ${String(Math.round(zone.load)).padStart(2, '0')}%`;
 }
 
-function facilityColor(state) {
-    if (state === 'alert') return '#ff3333';
-    if (state === 'warn') return '#ffb000';
-    return '#20c20e';
-}
-
-function facilityColorNumber(state) {
-    return Number.parseInt(facilityColor(state).slice(1), 16);
-}
-
-function facilityViewportSize(canvas) {
-    const rect = canvas.getBoundingClientRect();
-    const ratio = Math.min(window.devicePixelRatio || 1, 1.5);
+function facilityGridNode(zone, widget, frame) {
+    const drift = prefersReducedMotion ? 0 : Math.sin(frame * 0.042 + zone.pulse) * 0.35;
     return {
-        width: Math.max(1, Math.round(rect.width)),
-        height: Math.max(1, Math.round(rect.height)),
-        ratio
+        col: Math.max(6, Math.min(widget.cols - 7, Math.round(zone.x * (widget.cols - 12) + 6 + drift))),
+        row: Math.max(3, Math.min(widget.rows - 4, Math.round(zone.y * (widget.rows - 7) + 3 - drift * 0.45)))
     };
 }
 
-function getPixi() {
-    return window.PIXI && window.PIXI.Application && window.PIXI.Graphics ? window.PIXI : null;
-}
+function renderFacilityTopologyWidget(host, frame, zones, links, contacts) {
+    const widget = createSvgWidget(host, { cols: 76, rows: 34, cellWidth: 8, cellHeight: 12, kind: 'facility-topology' });
+    if (!widget) return;
+    renderWidgetFrame(widget, { className: 'telemetry-cyan' });
 
-function resetFacilityPixiState(options = {}) {
-    const app = facilityPixiState.app;
-    if (app && typeof app.destroy === 'function') {
-        try {
-            app.destroy(Boolean(options.removeView), { children: true, texture: false, baseTexture: false });
-        } catch (error) {}
-    }
-    facilityPixiState = {
-        app: null,
-        graphics: null,
-        staticGraphics: null,
-        dynamicGraphics: null,
-        labelContainer: null,
-        labels: [],
-        canvas: null,
-        staticSignature: '',
-        unavailable: Boolean(options.unavailable)
-    };
-    document.documentElement.classList.remove('has-pixi-active');
-}
+    for (let col = 6; col < widget.cols; col += 8) drawSvgGuideLine(widget, col, 2, col, widget.rows - 3, { opacity: 0.055, className: 'telemetry-green' });
+    for (let row = 4; row < widget.rows; row += 4) drawSvgGuideLine(widget, 3, row, widget.cols - 4, row, { opacity: 0.055, className: 'telemetry-green' });
+    drawSvgGuideCircle(widget, 38, 16, 8, { opacity: 0.08, className: 'telemetry-cyan' });
+    drawSvgGuideCircle(widget, 38, 16, 15, { opacity: 0.06, className: 'telemetry-cyan' });
+    svgLabel(widget.labelLayer, `GRID ${statusGet('facility.grid.id', 'BDR-01')} // GLYPH TOPOLOGY`, 2, 1, { className: 'telemetry-amber' });
 
-function ensureFacilityPixi(canvas) {
-    const PIXI = getPixi();
-    if (!PIXI || facilityPixiState.unavailable) return false;
-    if (facilityPixiState.app && facilityPixiState.canvas === canvas) return true;
-
-    resetFacilityPixiState();
-    try {
-        const ratio = Math.min(window.devicePixelRatio || 1, 1.5);
-        const app = new PIXI.Application({
-            view: canvas,
-            backgroundAlpha: 0,
-            antialias: false,
-            autoDensity: true,
-            resolution: ratio,
-            powerPreference: 'low-power',
-            clearBeforeRender: true,
-            autoStart: false
-        });
-        if (app.ticker && typeof app.ticker.stop === 'function') app.ticker.stop();
-        const staticGraphics = new PIXI.Graphics();
-        const dynamicGraphics = new PIXI.Graphics();
-        const labelContainer = new PIXI.Container();
-        app.stage.addChild(staticGraphics, dynamicGraphics, labelContainer);
-        facilityPixiState = {
-            app,
-            graphics: dynamicGraphics,
-            staticGraphics,
-            dynamicGraphics,
-            labelContainer,
-            labels: [],
-            canvas,
-            staticSignature: '',
-            unavailable: false
-        };
-        document.documentElement.classList.add('has-pixi-active');
-        return true;
-    } catch (error) {
-        resetFacilityPixiState({ unavailable: true });
-        document.documentElement.classList.remove('has-pixi-active');
-        return false;
-    }
-}
-
-function resizeFacilityPixi(canvas, width, height) {
-    const state = facilityPixiState;
-    if (!state.app || !state.app.renderer) return false;
-    if (facilityCanvasSize.width !== width || facilityCanvasSize.height !== height) {
-        state.app.renderer.resize(width, height);
-        state.staticSignature = '';
-    }
-    facilityCanvasSize.width = width;
-    facilityCanvasSize.height = height;
-    facilityCanvasSize.ratio = Math.min(window.devicePixelRatio || 1, 1.5);
-    return true;
-}
-
-function drawPixiDashedLine(graphics, x1, y1, x2, y2, dash = 8, gap = 8) {
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const distance = Math.hypot(dx, dy);
-    if (!distance) return;
-    const ux = dx / distance;
-    const uy = dy / distance;
-    let travelled = 0;
-    while (travelled < distance) {
-        const next = Math.min(distance, travelled + dash);
-        graphics.moveTo(x1 + ux * travelled, y1 + uy * travelled);
-        graphics.lineTo(x1 + ux * next, y1 + uy * next);
-        travelled += dash + gap;
-    }
-}
-
-function pixiLabel(index, text, x, y, color, size = 11, alpha = 0.9) {
-    const PIXI = getPixi();
-    if (!PIXI || !facilityPixiState.labelContainer) return;
-    let label = facilityPixiState.labels[index];
-    if (!label) {
-        label = new PIXI.Text('', {
-            fontFamily: '"IBM DOS ISO8", "Courier New", monospace',
-            fontSize: size,
-            fill: color,
-            letterSpacing: 0
-        });
-        label.resolution = Math.min(window.devicePixelRatio || 1, 1.5);
-        facilityPixiState.labels[index] = label;
-        facilityPixiState.labelContainer.addChild(label);
-    }
-    if (label.text !== text) label.text = text;
-    label.x = x;
-    label.y = y;
-    label.alpha = alpha;
-    if (label.style.fontSize !== size) label.style.fontSize = size;
-    if (label.style.fill !== color) label.style.fill = color;
-    label.visible = true;
-}
-
-function trimPixiLabels(usedCount) {
-    for (let i = usedCount; i < facilityPixiState.labels.length; i++) {
-        if (facilityPixiState.labels[i]) facilityPixiState.labels[i].visible = false;
-    }
-}
-
-function resizeFacilityCanvas(canvas, ctx) {
-    const { width, height, ratio } = facilityViewportSize(canvas);
-    const targetWidth = Math.max(1, Math.round(width * ratio));
-    const targetHeight = Math.max(1, Math.round(height * ratio));
-
-    if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
-        canvas.width = targetWidth;
-        canvas.height = targetHeight;
-    }
-
-    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-    facilityCanvasSize.width = width;
-    facilityCanvasSize.height = height;
-    facilityCanvasSize.ratio = ratio;
-}
-
-function facilityRect(zone, width, height, frame) {
-    const drift = prefersReducedMotion ? 0 : Math.sin(frame * 0.042 + zone.pulse) * 1.2;
-    const rect = {
-        x: Math.round(zone.x * width + drift),
-        y: Math.round(zone.y * height - drift * 0.45),
-        w: Math.max(52, Math.round(zone.w * width)),
-        h: Math.max(38, Math.round(zone.h * height))
-    };
-    rect.cx = rect.x + rect.w * 0.5;
-    rect.cy = rect.y + rect.h * 0.5;
-    return rect;
-}
-
-function drawFacilityBackdrop(ctx, width, height, frame) {
-    ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = 'rgba(0, 8, 4, 0.56)';
-    ctx.fillRect(0, 0, width, height);
-
-    const cx = width * 0.5;
-    const cy = height * 0.48;
-    ctx.save();
-    ctx.strokeStyle = '#00d4aa';
-    ctx.lineWidth = 1;
-    ctx.globalAlpha = 0.08;
-    for (let radius = 70; radius < Math.max(width, height); radius += 86) {
-        ctx.beginPath();
-        ctx.ellipse(cx, cy, radius, radius * 0.38, 0, 0, Math.PI * 2);
-        ctx.stroke();
-    }
-    ctx.globalAlpha = 0.1;
-    ctx.beginPath();
-    ctx.moveTo(0, cy);
-    ctx.lineTo(width, cy);
-    ctx.moveTo(cx, 0);
-    ctx.lineTo(cx, height);
-    ctx.stroke();
-
-    ctx.restore();
-}
-
-function drawFacilityConnection(ctx, link, rects, frame) {
-    const start = rects[link.from];
-    const end = rects[link.to];
-    if (!start || !end) return;
-
-    const color = facilityColor(link.state);
-    ctx.save();
-    ctx.strokeStyle = color;
-    ctx.globalAlpha = link.state === 'alert' ? 0.46 : 0.32;
-    ctx.lineWidth = link.state === 'alert' ? 1.2 : 1;
-    ctx.setLineDash(link.state === 'ok' ? [9, 11] : [5, 8]);
-    ctx.lineDashOffset = prefersReducedMotion ? 0 : -frame * (link.state === 'alert' ? 1.3 : 0.75);
-    ctx.beginPath();
-    ctx.moveTo(start.cx, start.cy);
-    ctx.lineTo(end.cx, end.cy);
-    ctx.stroke();
-
-    const t = prefersReducedMotion ? link.phase : (frame * 0.012 + link.phase) % 1;
-    const px = start.cx + (end.cx - start.cx) * t;
-    const py = start.cy + (end.cy - start.cy) * t;
-    ctx.setLineDash([]);
-    ctx.globalAlpha = link.state === 'alert' ? 0.95 : 0.72;
-    ctx.fillStyle = color;
-    ctx.fillRect(px - 2, py - 2, 4, 4);
-    ctx.restore();
-}
-
-function drawFacilityBlock(ctx, zone, rect, frame, width) {
-    const color = facilityColor(zone.state);
-    const blink = zone.state === 'alert' && !prefersReducedMotion && frame % 24 < 12;
-    const offset = Math.max(5, Math.min(10, rect.w * 0.09));
-    const labelSize = width < 560 ? 10 : 12;
-
-    ctx.save();
-    ctx.strokeStyle = color;
-    ctx.fillStyle = color;
-    ctx.lineWidth = zone.state === 'alert' ? 1.35 : 1;
-    ctx.globalAlpha = blink ? 0.55 : 0.84;
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 3;
-    ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
-    ctx.globalAlpha *= 0.52;
-    ctx.strokeRect(rect.x + offset, rect.y - offset, rect.w, rect.h);
-    ctx.beginPath();
-    ctx.moveTo(rect.x, rect.y);
-    ctx.lineTo(rect.x + offset, rect.y - offset);
-    ctx.moveTo(rect.x + rect.w, rect.y);
-    ctx.lineTo(rect.x + rect.w + offset, rect.y - offset);
-    ctx.moveTo(rect.x, rect.y + rect.h);
-    ctx.lineTo(rect.x + offset, rect.y + rect.h - offset);
-    ctx.moveTo(rect.x + rect.w, rect.y + rect.h);
-    ctx.lineTo(rect.x + rect.w + offset, rect.y + rect.h - offset);
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-
-    ctx.globalAlpha = 0.92;
-    ctx.font = `${labelSize}px "IBM DOS ISO8", "Courier New", monospace`;
-    ctx.fillText(zone.label, rect.x + 7, rect.y + 16);
-    ctx.globalAlpha = zone.state === 'ok' ? 0.62 : 0.86;
-    ctx.fillText(zone.status, rect.x + 7, rect.y + Math.min(rect.h - 8, 32));
-
-    const barWidth = Math.max(28, rect.w - 14);
-    const barY = rect.y + rect.h - 9;
-    ctx.globalAlpha = 0.24;
-    ctx.fillRect(rect.x + 7, barY, barWidth, 3);
-    ctx.globalAlpha = blink ? 0.62 : 0.75;
-    ctx.fillRect(rect.x + 7, barY, barWidth * Math.max(0.08, zone.load / 100), 3);
-    ctx.restore();
-}
-
-function drawFacilityContacts(ctx, rects, frame, contacts) {
-    ctx.save();
-    ctx.strokeStyle = '#ff3333';
-    ctx.fillStyle = '#ff3333';
-    ctx.lineWidth = 1;
-    contacts.forEach((contact, index) => {
-        const start = rects[contact.from];
-        const end = rects[contact.to];
-        if (!start || !end) return;
-        const t = prefersReducedMotion ? contact.phase : (contact.phase + frame * (0.006 + index * 0.001)) % 1;
-        const wobble = prefersReducedMotion ? 0 : Math.sin(frame * 0.09 + index) * 7;
-        const px = start.cx + (end.cx - start.cx) * t;
-        const py = start.cy + (end.cy - start.cy) * t + wobble;
-        const radius = 4 + (prefersReducedMotion ? 0 : Math.sin(frame * 0.18 + index) * 1.2);
-        ctx.globalAlpha = 0.38;
-        ctx.beginPath();
-        ctx.arc(px, py, radius + 4, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.globalAlpha = 0.95;
-        ctx.beginPath();
-        ctx.arc(px, py, Math.max(2, radius * 0.45), 0, Math.PI * 2);
-        ctx.fill();
+    const nodes = {};
+    zones.forEach(zone => {
+        nodes[zone.id] = facilityGridNode(zone, widget, frame);
     });
-    ctx.restore();
-}
-
-function renderFacilityStatusPixi(canvas, width, height, frame, zones, links, contacts, rects) {
-    try {
-        if (!ensureFacilityPixi(canvas)) return false;
-        if (!resizeFacilityPixi(canvas, width, height)) return false;
-
-        const state = facilityPixiState;
-        const staticGraphics = state.staticGraphics;
-        const graphics = state.dynamicGraphics || state.graphics;
-        if (!graphics || !staticGraphics || !state.app || !state.app.renderer) return false;
-
-        const cx = width * 0.5;
-        const cy = height * 0.48;
-        const staticSignature = `${width}x${height}:${EffectsController.isLow() ? 'low' : 'full'}`;
-        if (state.staticSignature !== staticSignature) {
-            staticGraphics.clear();
-            staticGraphics.beginFill(0x000804, 0.56);
-            staticGraphics.drawRect(0, 0, width, height);
-            staticGraphics.endFill();
-            staticGraphics.lineStyle(1, 0x00d4aa, EffectsController.isLow() ? 0.045 : 0.08);
-            for (let radius = 70; radius < Math.max(width, height); radius += 86) {
-                staticGraphics.drawEllipse(cx, cy, radius, radius * 0.38);
-            }
-            staticGraphics.lineStyle(1, 0x00d4aa, EffectsController.isLow() ? 0.06 : 0.1);
-            staticGraphics.moveTo(0, cy);
-            staticGraphics.lineTo(width, cy);
-            staticGraphics.moveTo(cx, 0);
-            staticGraphics.lineTo(cx, height);
-            state.staticSignature = staticSignature;
-        }
-
-        graphics.clear();
 
     links.forEach(link => {
-        const start = rects[link.from];
-        const end = rects[link.to];
+        const start = nodes[link.from];
+        const end = nodes[link.to];
         if (!start || !end) return;
-        const color = facilityColorNumber(link.state);
-        graphics.lineStyle(link.state === 'alert' ? 1.2 : 1, color, link.state === 'alert' ? 0.46 : 0.32);
-        drawPixiDashedLine(graphics, start.cx, start.cy, end.cx, end.cy, link.state === 'ok' ? 9 : 5, link.state === 'ok' ? 11 : 8);
+        const cls = link.state === 'alert' ? 'telemetry-red' : link.state === 'warn' ? 'telemetry-amber' : 'telemetry-cyan';
+        drawSvgGuideLine(widget, start.col, start.row, end.col, end.row, { className: cls, opacity: link.state === 'alert' ? 0.24 : 0.16 });
         const t = prefersReducedMotion ? link.phase : (frame * 0.012 + link.phase) % 1;
-        const px = start.cx + (end.cx - start.cx) * t;
-        const py = start.cy + (end.cy - start.cy) * t;
-        graphics.beginFill(color, link.state === 'alert' ? 0.95 : 0.72);
-        graphics.drawRect(px - 2, py - 2, 4, 4);
-        graphics.endFill();
+        const packetCol = Math.round(start.col + (end.col - start.col) * t);
+        const packetRow = Math.round(start.row + (end.row - start.row) * t);
+        svgTextGlyph(widget.glyphLayer, link.state === 'alert' ? '◆' : '●', packetCol, packetRow, { className: cls, opacity: link.state === 'alert' ? 0.96 : 0.76 });
     });
 
-    let labelIndex = 0;
     zones.forEach(zone => {
-        const rect = rects[zone.id];
-        if (!rect) return;
-        const color = facilityColorNumber(zone.state);
-        const colorText = facilityColor(zone.state);
+        const node = nodes[zone.id];
+        if (!node) return;
+        const cls = zone.state === 'alert' ? 'telemetry-red' : zone.state === 'warn' ? 'telemetry-amber' : 'telemetry-green';
         const blink = zone.state === 'alert' && !prefersReducedMotion && frame % 24 < 12;
-        const offset = Math.max(5, Math.min(10, rect.w * 0.09));
-        const labelSize = width < 560 ? 10 : 12;
-
-        graphics.lineStyle(zone.state === 'alert' ? 1.35 : 1, color, blink ? 0.55 : 0.84);
-        graphics.drawRect(rect.x, rect.y, rect.w, rect.h);
-        graphics.lineStyle(zone.state === 'alert' ? 1.35 : 1, color, blink ? 0.28 : 0.44);
-        graphics.drawRect(rect.x + offset, rect.y - offset, rect.w, rect.h);
-        graphics.moveTo(rect.x, rect.y);
-        graphics.lineTo(rect.x + offset, rect.y - offset);
-        graphics.moveTo(rect.x + rect.w, rect.y);
-        graphics.lineTo(rect.x + rect.w + offset, rect.y - offset);
-        graphics.moveTo(rect.x, rect.y + rect.h);
-        graphics.lineTo(rect.x + offset, rect.y + rect.h - offset);
-        graphics.moveTo(rect.x + rect.w, rect.y + rect.h);
-        graphics.lineTo(rect.x + rect.w + offset, rect.y + rect.h - offset);
-
-        graphics.beginFill(color, 0.24);
-        graphics.drawRect(rect.x + 7, rect.y + rect.h - 9, Math.max(28, rect.w - 14), 3);
-        graphics.endFill();
-        graphics.beginFill(color, blink ? 0.62 : 0.75);
-        graphics.drawRect(rect.x + 7, rect.y + rect.h - 9, Math.max(28, rect.w - 14) * Math.max(0.08, zone.load / 100), 3);
-        graphics.endFill();
-
-        pixiLabel(labelIndex++, zone.label, rect.x + 7, rect.y + 5, colorText, labelSize, 0.92);
-        pixiLabel(labelIndex++, zone.status, rect.x + 7, rect.y + Math.min(rect.h - 19, 21), colorText, labelSize, zone.state === 'ok' ? 0.62 : 0.86);
+        drawSvgGuideRect(widget, node.col - 4, node.row - 1, 8, 3, { className: cls, opacity: blink ? 0.34 : 0.24 });
+        svgTextGlyph(widget.glyphLayer, zone.state === 'alert' ? '△' : zone.state === 'warn' ? '◇' : '□', node.col - 3, node.row, { className: cls, opacity: blink ? 0.58 : 0.95 });
+        renderGlyphRow(widget.glyphLayer, node.row, shortTelemetryLine(zone.label, 7), { col: node.col - 1, className: cls, opacity: 0.9 });
+        const loadCells = Math.max(1, Math.round(zone.load / 20));
+        renderGlyphRow(widget.glyphLayer, node.row + 1, `${'█'.repeat(loadCells)}${'░'.repeat(5 - loadCells)}`, { col: node.col - 2, className: cls, opacity: 0.72 });
     });
 
-    graphics.lineStyle(1, 0xff3333, 1);
     contacts.forEach((contact, index) => {
-        const start = rects[contact.from];
-        const end = rects[contact.to];
+        const start = nodes[contact.from];
+        const end = nodes[contact.to];
         if (!start || !end) return;
         const t = prefersReducedMotion ? contact.phase : (contact.phase + frame * (0.006 + index * 0.001)) % 1;
-        const wobble = prefersReducedMotion ? 0 : Math.sin(frame * 0.09 + index) * 7;
-        const px = start.cx + (end.cx - start.cx) * t;
-        const py = start.cy + (end.cy - start.cy) * t + wobble;
-        const radius = 4 + (prefersReducedMotion ? 0 : Math.sin(frame * 0.18 + index) * 1.2);
-        graphics.lineStyle(1, 0xff3333, 0.38);
-        graphics.drawCircle(px, py, radius + 4);
-        graphics.beginFill(0xff3333, 0.95);
-        graphics.drawCircle(px, py, Math.max(2, radius * 0.45));
-        graphics.endFill();
+        const wobble = prefersReducedMotion ? 0 : Math.sin(frame * 0.09 + index) * 1.25;
+        const col = Math.round(start.col + (end.col - start.col) * t);
+        const row = Math.round(start.row + (end.row - start.row) * t + wobble);
+        svgTextGlyph(widget.glyphLayer, '◆', col, row, { className: 'telemetry-red', opacity: frame % 10 < 5 ? 0.72 : 1 });
     });
-    trimPixiLabels(labelIndex);
-
-        state.app.renderer.render(state.app.stage);
-        return true;
-    } catch (error) {
-        resetFacilityPixiState({ unavailable: true });
-        document.documentElement.classList.remove('has-pixi-active');
-        return false;
-    }
 }
 
 function updateFacilityReadouts(frame) {
@@ -1352,39 +2194,13 @@ function updateFacilityReadouts(frame) {
 }
 
 function renderFacilityStatus(timestamp = 0) {
-    const canvas = getById('facilityCanvas');
-    if (!canvas) return;
-    const { width, height } = facilityViewportSize(canvas);
-    const frame = facilityFrame || Math.round(timestamp / 33);
-    const rects = {};
+    const host = getById('facilityCanvas');
+    if (!host) return;
+    const frame = Number.isFinite(facilityFrame) ? facilityFrame : Math.round(timestamp / 33);
     const zones = getFacilityZones();
     const links = getFacilityLinks();
     const contacts = getFacilityContacts();
-
-    zones.forEach(zone => {
-        rects[zone.id] = facilityRect(zone, width, height, frame);
-    });
-
-    if (renderFacilityStatusPixi(canvas, width, height, frame, zones, links, contacts, rects)) {
-        if (frame < 3 || frame % 4 === 0 || prefersReducedMotion) {
-            updateFacilityReadouts(frame);
-        }
-        return;
-    }
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-        if (frame < 3 || frame % 4 === 0 || prefersReducedMotion) {
-            updateFacilityReadouts(frame);
-        }
-        return;
-    }
-
-    resizeFacilityCanvas(canvas, ctx);
-    drawFacilityBackdrop(ctx, width, height, frame);
-    links.forEach(link => drawFacilityConnection(ctx, link, rects, frame));
-    zones.forEach(zone => drawFacilityBlock(ctx, zone, rects[zone.id], frame, width));
-    drawFacilityContacts(ctx, rects, frame, contacts);
+    renderFacilityTopologyWidget(host, frame, zones, links, contacts);
 
     if (frame < 3 || frame % 4 === 0 || prefersReducedMotion) {
         updateFacilityReadouts(frame);
@@ -1417,16 +2233,6 @@ function showFacilityStatus() {
     overlay.classList.add('active');
     overlay.setAttribute('aria-hidden', 'false');
     renderFacilityStatus(performance.now());
-    if (!getPixi()) {
-        loadScriptOnce('pixi')
-            .then(() => {
-                configureLibrarySupport();
-                if (facilityActive) renderFacilityStatus(performance.now());
-            })
-            .catch(() => {
-                facilityPixiState.unavailable = true;
-            });
-    }
     AudioEngine.bootBeep();
     Animator.dialogOpen(overlay);
     if (!prefersReducedMotion) {

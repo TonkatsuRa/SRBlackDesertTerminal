@@ -15,6 +15,7 @@ function initTerminal() {
     updateMenuSelection();
     updateDatabaseSlotIndicators();
     syncAppStateFromLegacy({ resetSelection: false });
+    if (typeof renderSideGlyphTelemetry === 'function') renderSideGlyphTelemetry(0);
     startShellTelemetry();
     
     if (!terminalKeyHandlerBound) {
@@ -782,6 +783,7 @@ function setNetworkOnline(online, options = {}) {
     }
 
     setAppState({ networkOnline: nextOnline }, { resetSelection: false });
+    if (typeof renderSideGlyphTelemetry === 'function') renderSideGlyphTelemetry(facilityFrame || diagnosticFrame || 0);
 
     if (!nextOnline) {
         closeDiagnosticDashboard();

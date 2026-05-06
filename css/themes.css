@@ -667,6 +667,15 @@ body {
     letter-spacing: 0.02em;
 }
 
+.side-glyph-widget {
+    min-height: 74px;
+    padding: 0;
+}
+
+.side-glyph-widget .telemetry-svg {
+    min-height: 72px;
+}
+
 .diag-ascii {
     display: block;
 }

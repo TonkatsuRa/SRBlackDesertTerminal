@@ -18,8 +18,7 @@ const TYPEWRITER_CONFIG = {
 const EFFECTS_STORAGE_KEY = 'aresEffectsMode.v1';
 const EFFECTS_MODES = new Set(['auto', 'full', 'low']);
 const CDN_SCRIPTS = {
-    fuse: 'https://cdn.jsdelivr.net/npm/fuse.js@7.2.0/dist/fuse.min.js',
-    pixi: 'https://cdn.jsdelivr.net/npm/pixi.js@7.4.3/dist/pixi.min.js'
+    fuse: 'https://cdn.jsdelivr.net/npm/fuse.js@7.2.0/dist/fuse.min.js'
 };
 const lazyScriptPromises = new Map();
 let effectsMode = 'auto';
@@ -225,13 +224,11 @@ function updateEffectsStatus() {
 function configureLibrarySupport() {
     const root = document.documentElement;
     root.classList.toggle('has-fuse', typeof window.Fuse === 'function');
-    root.classList.toggle('has-pixi', Boolean(window.PIXI && window.PIXI.Application && window.PIXI.Graphics));
 }
 
 function loadScriptOnce(key, url = CDN_SCRIPTS[key]) {
     if (!url) return Promise.reject(new Error(`Unknown script: ${key}`));
     if (key === 'fuse' && typeof window.Fuse === 'function') return Promise.resolve();
-    if (key === 'pixi' && window.PIXI && window.PIXI.Application && window.PIXI.Graphics) return Promise.resolve();
     if (lazyScriptPromises.has(key)) return lazyScriptPromises.get(key);
 
     const promise = new Promise((resolve, reject) => {
@@ -457,18 +454,6 @@ let facilityActive = false;
 let facilityFrame = 0;
 let facilityAnimFrame = null;
 let facilityLastRender = 0;
-const facilityCanvasSize = { width: 0, height: 0, ratio: 1 };
-let facilityPixiState = {
-    app: null,
-    graphics: null,
-    staticGraphics: null,
-    dynamicGraphics: null,
-    labelContainer: null,
-    labels: [],
-    canvas: null,
-    staticSignature: '',
-    unavailable: false
-};
 let facilityZoneCache = null;
 let facilityLinkCache = null;
 let facilityContactCache = null;
