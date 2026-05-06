@@ -196,7 +196,7 @@ function startBootSequence() {
     const bootSkip = document.getElementById('bootSkip');
     const bootScroll = bootOutput.closest('.boot-left');
     const bootTimers = [];
-    const bootSpeed = prefersReducedMotion ? MOTION_SCALE : 0.72;
+    const bootSpeed = prefersReducedMotion ? MOTION_SCALE : 0.36;
     let bootComplete = false;
     let stepIndex = 0;
     let bootScrollFrame = null;
@@ -440,7 +440,7 @@ function bootStatusClass(status) {
 
         const severity = bootStatusSeverity(step.status);
         if (severity !== 'ok') {
-            await renderBootStatusSpinner(status, severity === 'fail' ? 1800 : 1200);
+            await renderBootStatusSpinner(status, severity === 'fail' ? 900 : 600);
         } else {
             await sleep(45);
         }
@@ -538,14 +538,14 @@ function bootStatusClass(status) {
                 gsap.to(bootOutput, {
                     opacity: 0,
                     y: -10,
-                    duration: 0.34,
+                    duration: 0.17,
                     ease: 'power2.in',
                     onComplete: resolve
                 });
             });
         } else {
             bootOutput.classList.add('fading');
-            await sleep(340, false);
+            await sleep(170, false);
         }
 
         clearElement(bootOutput);
@@ -570,14 +570,14 @@ function bootStatusClass(status) {
             await new Promise(resolve => {
                 gsap.to([bootOutput, '.boot-skip'], {
                     opacity: 0,
-                    duration: 0.34,
+                    duration: 0.17,
                     ease: 'power2.in',
                     onComplete: resolve
                 });
             });
         }
         bootScreen.classList.add('boot-blackout');
-        await sleep(420, false);
+        await sleep(210, false);
     }
     
     // Set logo content (hidden initially)
@@ -631,21 +631,21 @@ function bootStatusClass(status) {
 
         await sleep(140);
         await renderBootLine('> DISPLAY BUFFER LOCKED // CORPORATE IDENT READY', 'boot-section');
-        await renderBootLoadingBar(prefersReducedMotion ? 800 : 10000);
+        await renderBootLoadingBar(prefersReducedMotion ? 400 : 5000);
         if (bootComplete) return;
 
-        await sleep(260, false);
+        await sleep(130, false);
         await clearBootLog();
         if (bootComplete) return;
 
         await showBootLogo();
         if (bootComplete) return;
         AudioEngine.startupJingle();
-        await sleep(prefersReducedMotion ? 900 : 5000, false);
+        await sleep(prefersReducedMotion ? 450 : 2500, false);
         if (bootComplete) return;
 
         await enterBootBlackout();
-        finishBoot(false, { exitDuration: prefersReducedMotion ? 0.01 : 1 });
+        finishBoot(false, { exitDuration: prefersReducedMotion ? 0.01 : 0.5 });
     }
 
     runBootSequence();

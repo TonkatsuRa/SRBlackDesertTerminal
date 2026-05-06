@@ -231,7 +231,7 @@ body {
     grid-column: 3;
     width: auto;
     height: 100%;
-    padding: 8px 6px;
+    padding: 6px 7px;
     display: grid;
     place-items: center;
     text-align: center;
@@ -239,31 +239,102 @@ body {
     min-height: 104px;
 }
 
-.ares-wordmark pre {
+.ares-wordmark-svg {
     position: relative;
     z-index: 2;
-    margin: 0;
-    color: var(--amber);
-    display: inline-block;
-    width: auto;
-    max-width: calc(100% - 8px);
-    color: var(--amber);
-    font-size: clamp(8px, 0.72vw, 11px);
-    line-height: 1.02;
-    letter-spacing: 0;
-    white-space: pre;
-    text-align: center;
-    transform: none;
-    transform-origin: center;
-}
-
-.ares-wordmark pre span {
     display: block;
+    width: 100%;
+    height: 100%;
+    min-height: 96px;
+    color: var(--amber);
+    overflow: visible;
+    filter: drop-shadow(0 0 3px rgba(255, 173, 0, 0.38));
 }
 
-.ares-wordmark .logo-amber {
-    color: var(--amber);
-    text-shadow: 0 0 4px rgba(255, 173, 0, 0.46);
+.ares-wordmark-grid path,
+.ares-emblem path {
+    fill: none;
+    stroke: currentColor;
+    vector-effect: non-scaling-stroke;
+}
+
+.ares-wordmark-grid path {
+    stroke-width: 0.7;
+    opacity: 0.18;
+}
+
+.ares-emblem-core {
+    stroke-width: 2.1;
+    opacity: 0.92;
+}
+
+.ares-emblem-rake {
+    stroke-width: 0.9;
+    opacity: 0.56;
+}
+
+.ares-emblem-lines {
+    stroke-width: 0.8;
+    opacity: 0.34;
+}
+
+.ares-wordmark-main,
+.ares-wordmark-sub {
+    font-family: var(--terminal-font);
+    fill: currentColor;
+    text-anchor: start;
+    paint-order: stroke;
+    stroke: rgba(0, 0, 0, 0.72);
+}
+
+.ares-wordmark-main {
+    font-size: 35px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    stroke-width: 1.1px;
+}
+
+.ares-wordmark-sub {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    opacity: 0.82;
+    stroke-width: 0.7px;
+}
+
+.ares-wordmark-scan {
+    fill: none;
+    stroke: var(--cyan);
+    stroke-width: 1;
+    opacity: 0.25;
+    transform-origin: center;
+    vector-effect: non-scaling-stroke;
+    animation: aresWordmarkScan 5.8s linear infinite;
+}
+
+.ares-wordmark-svg .ares-emblem-core,
+.ares-wordmark-svg .ares-wordmark-main {
+    animation: aresWordmarkGlow 4.6s ease-in-out infinite;
+}
+
+@keyframes aresWordmarkScan {
+    0% { transform: translateY(-12px); opacity: 0; }
+    12% { opacity: 0.22; }
+    50% { opacity: 0.36; }
+    100% { transform: translateY(72px); opacity: 0; }
+}
+
+@keyframes aresWordmarkGlow {
+    0%, 100% { opacity: 0.84; }
+    50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ares-wordmark-scan,
+    .ares-wordmark-svg .ares-emblem-core,
+    .ares-wordmark-svg .ares-wordmark-main {
+        animation: none;
+    }
 }
 
 .terminal-body {
@@ -530,7 +601,8 @@ body {
     padding: 0;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
 }
 
 .facility-overview-card {
@@ -601,19 +673,20 @@ body {
 }
 
 .right-actions-card {
-    flex: 1 1 auto;
+    flex: 0 0 auto;
     display: grid;
-    grid-template-rows: auto minmax(88px, 1fr) minmax(88px, 1fr);
+    grid-template-rows: auto auto auto;
     gap: 8px;
-    min-height: 220px;
+    min-height: 0;
 }
 
 .side-action-module {
     width: 100%;
-    min-height: 88px;
+    min-height: 0;
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: auto 86px;
     gap: 6px;
+    align-items: stretch;
 }
 
 .side-action-button {
@@ -668,12 +741,14 @@ body {
 }
 
 .side-glyph-widget {
-    min-height: 74px;
+    height: 86px;
+    min-height: 86px;
     padding: 0;
 }
 
 .side-glyph-widget .telemetry-svg {
-    min-height: 72px;
+    height: 86px;
+    min-height: 86px;
 }
 
 .diag-ascii {

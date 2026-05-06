@@ -9,7 +9,7 @@ let MOTION_SCALE = prefersReducedMotion ? 0.25 : 1;
 let mediaPreferenceHandlersBound = false;
 const TYPEWRITER_CONFIG = {
     charInterval: prefersReducedMotion ? 0 : 9,
-    bootCharInterval: prefersReducedMotion ? 0 : 22,
+    bootCharInterval: prefersReducedMotion ? 0 : 11,
     terminalCharsPerSecond: prefersReducedMotion ? 0 : 180,
     terminalMaxCharsPerFrame: prefersReducedMotion ? 1 : 3,
     terminalKeyClickMs: 70,
@@ -99,7 +99,7 @@ function applyMotionPreference(matches = reducedMotionQuery.matches) {
     prefersReducedMotion = Boolean(matches);
     MOTION_SCALE = prefersReducedMotion ? 0.25 : 1;
     TYPEWRITER_CONFIG.charInterval = prefersReducedMotion ? 0 : 9;
-    TYPEWRITER_CONFIG.bootCharInterval = prefersReducedMotion ? 0 : 22;
+    TYPEWRITER_CONFIG.bootCharInterval = prefersReducedMotion ? 0 : 11;
     TYPEWRITER_CONFIG.terminalCharsPerSecond = prefersReducedMotion ? 0 : 180;
     TYPEWRITER_CONFIG.terminalMaxCharsPerFrame = prefersReducedMotion ? 1 : 3;
     TYPEWRITER_CONFIG.lineDelay = prefersReducedMotion ? 0 : 0;

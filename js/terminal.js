@@ -1,6 +1,9 @@
 // ========================================
 // TERMINAL INIT
 // ========================================
+let terminalShutdownActive = false;
+let terminalShutdownTimers = [];
+
 function scheduleHologramStart(delay = 0) {
     if (hologramStarted || hologramStartTimer) return;
     hologramStartTimer = setTimeout(() => {
@@ -10,6 +13,8 @@ function scheduleHologramStart(delay = 0) {
 }
 
 function initTerminal() {
+    terminalShutdownActive = false;
+    setSystemStatusVisual(true);
     clearOutput({ force: true });
     showWelcome();
     updateMenuSelection();
@@ -17,6 +22,7 @@ function initTerminal() {
     syncAppStateFromLegacy({ resetSelection: false });
     if (typeof renderSideGlyphTelemetry === 'function') renderSideGlyphTelemetry(0);
     startShellTelemetry();
+    if (typeof startSideTelemetryLoop === 'function') startSideTelemetryLoop();
     
     if (!terminalKeyHandlerBound) {
         document.addEventListener('keydown', handleGlobalKeydown);
@@ -59,6 +65,18 @@ function initTerminal() {
         if (networkToggle) {
             networkToggle.addEventListener('click', () => {
                 toggleNetwork({ announce: true });
+            });
+        }
+        const systemToggle = getById('systemStatusItem');
+        if (systemToggle) {
+            systemToggle.addEventListener('click', () => {
+                startTerminalShutdown();
+            });
+        }
+        const rebootButton = getById('rebootTerminalBtn');
+        if (rebootButton) {
+            rebootButton.addEventListener('click', () => {
+                rebootTerminalFromOffline();
             });
         }
         const effectsToggle = getById('effectsToggle');
@@ -108,6 +126,120 @@ function startShellTelemetry() {
     shellTelemetryTimer = setInterval(updateShellTelemetry, 1000);
 }
 
+function stopShellTelemetry() {
+    if (!shellTelemetryTimer) return;
+    clearInterval(shellTelemetryTimer);
+    shellTelemetryTimer = null;
+}
+
+function clearShutdownTimers() {
+    terminalShutdownTimers.forEach(timerId => clearTimeout(timerId));
+    terminalShutdownTimers = [];
+}
+
+function scheduleShutdownStep(callback, delay = 0) {
+    const timerId = setTimeout(() => {
+        terminalShutdownTimers = terminalShutdownTimers.filter(id => id !== timerId);
+        callback();
+    }, Math.max(0, delay));
+    terminalShutdownTimers.push(timerId);
+}
+
+function setSystemStatusVisual(online) {
+    const systemToggle = getById('systemStatusItem');
+    const systemText = getById('systemStatus');
+    const systemDot = getById('systemDot');
+    if (systemText) systemText.textContent = online ? 'ONLINE' : 'OFFLINE';
+    if (systemDot) systemDot.classList.toggle('err', !online);
+    if (systemToggle) {
+        systemToggle.classList.toggle('offline', !online);
+        systemToggle.disabled = !online;
+        systemToggle.setAttribute('aria-label', online
+            ? 'System online. Activate to shut down terminal.'
+            : 'System offline.');
+    }
+}
+
+function appendShutdownLog(text, className = '') {
+    const log = getById('shutdownLog');
+    if (!log) return;
+    const line = document.createElement('div');
+    line.className = `shutdown-log-line ${className}`.trim();
+    line.textContent = text;
+    log.appendChild(line);
+}
+
+function completeTerminalShutdown() {
+    const screen = getById('shutdownScreen');
+    if (screen) {
+        screen.classList.add('offline');
+        screen.setAttribute('aria-hidden', 'false');
+    }
+    document.body.classList.remove('terminal-shutting-down', 'terminal-ready');
+    document.body.classList.add('terminal-offline');
+    setSystemStatusVisual(false);
+    AudioEngine.errorBuzz();
+}
+
+function startTerminalShutdown() {
+    if (terminalShutdownActive) return;
+    const screen = getById('shutdownScreen');
+    const log = getById('shutdownLog');
+    if (!screen) return;
+
+    terminalShutdownActive = true;
+    clearShutdownTimers();
+    if (log) clearElement(log);
+    screen.classList.remove('hidden', 'offline');
+    screen.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('terminal-shutting-down');
+
+    AudioEngine.resume();
+    AudioEngine.menuSelect();
+    closeDiagnosticDashboard();
+    closeFacilityStatus();
+    pauseRealtimePanels();
+    stopShellTelemetry();
+    if (typeof stopSideTelemetryLoop === 'function') stopSideTelemetryLoop();
+
+    const stepDelay = prefersReducedMotion ? 70 : 300;
+    const sequence = [
+        ['> SYS CONTROL ACCEPTED // OPERATOR SHUTDOWN', 'warn'],
+        ['> ARES MACROTECHNOLOGY IDENT BUFFER LOCKED', ''],
+        ['> TERMINATING DIAGNOSTIC BUS', ''],
+        ['> HALTING FACILITY TELEMETRY STREAM', ''],
+        ['> PURGING LOCAL COMMAND CACHE', 'warn'],
+        ['> PHOSPHOR DISPLAY ENTERING DARK STATE', 'alert'],
+        ['> CORE SESSION SEALED // TERMINAL OFFLINE', 'alert']
+    ];
+
+    sequence.forEach(([text, className], index) => {
+        scheduleShutdownStep(() => {
+            appendShutdownLog(text, className);
+            if (index % 2 === 0) AudioEngine.keyClick();
+        }, stepDelay * (index + 1));
+    });
+    scheduleShutdownStep(completeTerminalShutdown, stepDelay * (sequence.length + 1));
+}
+
+function rebootTerminalFromOffline() {
+    clearShutdownTimers();
+    terminalShutdownActive = false;
+    const screen = getById('shutdownScreen');
+    const log = getById('shutdownLog');
+    if (screen) {
+        screen.classList.add('hidden');
+        screen.classList.remove('offline');
+        screen.setAttribute('aria-hidden', 'true');
+    }
+    if (log) clearElement(log);
+    document.body.classList.remove('terminal-shutting-down', 'terminal-offline', 'terminal-ready');
+    setSystemStatusVisual(true);
+    AudioEngine.resume();
+    AudioEngine.bootBeep();
+    startBootSequence();
+}
+
 function isEditableKeyTarget(target) {
     if (!(target instanceof Element)) return false;
     const tagName = target.tagName.toLowerCase();
@@ -138,6 +270,10 @@ function routeKeyToCommandInput(event, input) {
 }
 
 function handleGlobalKeydown(e) {
+    if (terminalShutdownActive || document.body.classList.contains('terminal-offline')) {
+        return;
+    }
+
     if (document.getElementById('liebiOverlay') || document.getElementById('gameOverlay') || document.getElementById('casinoOverlay')) {
         return;
     }

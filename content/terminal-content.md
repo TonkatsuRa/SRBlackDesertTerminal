@@ -466,11 +466,11 @@ ticker = FACILITY PASS: EXTERNAL COMMS DOWN // DEFENSE ARMED // DIS SENSORS DEGR
 
 ## diagnostic.label
 network = ENTITY NOISE // SPECTRUM
-security = ENTITY NOISE // SPECTROMETER
+security = ANOMALY TOMOGRAPHY // FIELD
 outposts = TACTICAL SWEEP // RADAR
 generator = GATE STABILITY // DUAL TRACE
 power = REACTOR // CONTAINMENT // SYNC
-alarm = ANOMALY TOMOGRAPHY // FIELD
+alarm = BLACK DESERT // MESH MAP
 life = BIOSCAN ARRAY // VITALS
 events = LIVE EVENT LOG // DIAGNOSTICS
 integrity = SIGNAL STRENGTH
@@ -493,7 +493,7 @@ DRONE UPLINK : DEGRADED 77%
 
 ## diagnostic.security
 state = warn
-status = ARMED
+status = MESH
 level = 81
 protocol = ENGAGED
 defense = ARMED

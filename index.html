@@ -65,16 +65,16 @@
                     <div class="diagnostic-readout telemetry-widget" id="diagNetwork" role="img" aria-label="SVG spectrum waterfall for entity noise and communications"></div>
                 </div>
                 <div class="diagnostic-card diagnostic-card-feature" id="diagAlarmCard">
-                    <div class="diagnostic-label"><span>ANOMALY TOMOGRAPHY // FIELD</span><span id="diagAlarmStatus">WATCH</span></div>
-                    <div class="diagnostic-readout telemetry-widget telemetry-widget-large" id="diagAlarm" role="img" aria-label="SVG anomaly tomography wireframe field intensity map"></div>
+                    <div class="diagnostic-label"><span>BLACK DESERT // MESH MAP</span><span id="diagAlarmStatus">WATCH</span></div>
+                    <div class="diagnostic-readout telemetry-widget telemetry-widget-large" id="diagAlarm" role="img" aria-label="SVG Black Desert expedition wireframe map overview with ARES sites, routes, zones, and hazards"></div>
                 </div>
                 <div class="diagnostic-card" id="diagPowerCard">
                     <div class="diagnostic-label"><span>REACTOR // CONTAINMENT // SYNC</span><span id="diagPowerStatus">RESERVE</span></div>
                     <div class="diagnostic-readout telemetry-widget" id="diagPower" role="img" aria-label="SVG reactor containment and sync telemetry"></div>
                 </div>
                 <div class="diagnostic-card" id="diagSecurityCard">
-                    <div class="diagnostic-label"><span>ENTITY NOISE // SPECTROMETER</span><span id="diagSecurityStatus">CHECK</span></div>
-                    <div class="diagnostic-readout telemetry-widget" id="diagSecurity" role="img" aria-label="SVG entity noise spectrometer with waterfall and signal legend"></div>
+                    <div class="diagnostic-label"><span>ANOMALY TOMOGRAPHY // FIELD</span><span id="diagSecurityStatus">CHECK</span></div>
+                    <div class="diagnostic-readout telemetry-widget" id="diagSecurity" role="img" aria-label="SVG anomaly tomography wireframe field intensity map"></div>
                 </div>
                 <div class="diagnostic-card" id="diagEventsCard">
                     <div class="diagnostic-label"><span>LIVE EVENT LOG // DIAGNOSTICS</span><span id="diagEventsStatus">FEED</span></div>
@@ -162,7 +162,9 @@
                     <div class="header-primary">
                         <div class="system-title glow">BLACK DESERT RESEARCH TERMINAL</div>
                         <div class="status-bar" aria-label="System status">
-                            <div class="status-item"><div class="status-dot"></div> SYS <span>ONLINE</span></div>
+                            <button class="status-item status-button status-toggle system-toggle" id="systemStatusItem" type="button" aria-label="System online. Activate to shut down terminal.">
+                                <div class="status-dot" id="systemDot"></div> SYS <span id="systemStatus">ONLINE</span>
+                            </button>
                             <button class="status-item status-button status-toggle" id="networkStatusItem" type="button" aria-label="Network online. Activate to toggle network state.">
                                 <div class="status-dot" id="networkDot"></div> NET <span id="networkStatus">ONLINE</span>
                             </button>
@@ -183,11 +185,22 @@
                     </div>
                 </div>
                 <div class="hologram-panel ares-wordmark" aria-label="Ares Macrotechnology identity">
-                    <pre class="glow logo-amber">    _    ____  _____ ____
-   / \  |  _ \| ____/ ___|
-  / _ \ | |_) |  _| \___ \
- / ___ \|  _ &lt;| |___ ___) |
-/_/   \_\_| \_\_____|____/</pre>
+                    <svg class="ares-wordmark-svg glow" viewBox="0 0 270 122" role="img" aria-label="ARES Macrotechnology">
+                        <g class="ares-wordmark-grid" aria-hidden="true">
+                            <path d="M20 17H248M20 104H248M20 17V104M248 17V104" />
+                            <path d="M36 88H232M36 32H232M58 17V104M212 17V104" />
+                        </g>
+                        <g class="ares-emblem" aria-hidden="true">
+                            <path class="ares-emblem-core" d="M35 82 57 35 79 82M46 62h22M57 35v47" />
+                            <path class="ares-emblem-rake" d="M57 18v17M45 23l12 12 12-12M28 91l29-56 29 56" />
+                            <path class="ares-emblem-lines" d="M24 94h66M31 88h52M39 76h36" />
+                        </g>
+                        <g class="ares-wordmark-text">
+                            <text class="ares-wordmark-main" x="98" y="62">ARES</text>
+                            <text class="ares-wordmark-sub" x="101" y="88">Macrotechnology</text>
+                        </g>
+                        <path class="ares-wordmark-scan" d="M20 28H248" aria-hidden="true" />
+                    </svg>
                 </div>
             </header>
 
@@ -305,6 +318,35 @@
     </main>
 
     <div class="nav-hint glow" id="navHint">[ ↑ ↓ ] COMMAND HISTORY</div>
+
+    <div class="shutdown-screen hidden" id="shutdownScreen" aria-hidden="true">
+        <div class="shutdown-panel">
+            <svg class="ares-wordmark-svg shutdown-ares-wordmark glow" viewBox="0 0 270 122" aria-hidden="true">
+                <g class="ares-wordmark-grid">
+                    <path d="M20 17H248M20 104H248M20 17V104M248 17V104" />
+                    <path d="M36 88H232M36 32H232M58 17V104M212 17V104" />
+                </g>
+                <g class="ares-emblem">
+                    <path class="ares-emblem-core" d="M35 82 57 35 79 82M46 62h22M57 35v47" />
+                    <path class="ares-emblem-rake" d="M57 18v17M45 23l12 12 12-12M28 91l29-56 29 56" />
+                    <path class="ares-emblem-lines" d="M24 94h66M31 88h52M39 76h36" />
+                </g>
+                <g class="ares-wordmark-text">
+                    <text class="ares-wordmark-main" x="98" y="62">ARES</text>
+                    <text class="ares-wordmark-sub" x="101" y="88">Macrotechnology</text>
+                </g>
+                <path class="ares-wordmark-scan" d="M20 28H248" />
+            </svg>
+            <div class="shutdown-log glow" id="shutdownLog" aria-live="polite"></div>
+            <pre class="shutdown-offline-ascii glow" id="shutdownOfflineText" aria-label="Terminal offline"> ██████╗ ███████╗███████╗██╗     ██╗███╗   ██╗███████╗
+██╔═══██╗██╔════╝██╔════╝██║     ██║████╗  ██║██╔════╝
+██║   ██║█████╗  █████╗  ██║     ██║██╔██╗ ██║█████╗
+██║   ██║██╔══╝  ██╔══╝  ██║     ██║██║╚██╗██║██╔══╝
+╚██████╔╝██║     ██║     ███████╗██║██║ ╚████║███████╗
+ ╚═════╝ ╚═╝     ╚═╝     ╚══════╝╚═╝╚═╝  ╚═══╝╚══════╝</pre>
+        </div>
+        <button class="shutdown-reboot-button glow" id="rebootTerminalBtn" type="button">Reboot Terminal</button>
+    </div>
 
     <!-- GSAP is used for boot and panel transitions. Fuse is lazy-loaded by the app scripts only when needed. -->
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js" defer></script>

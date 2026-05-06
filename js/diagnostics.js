@@ -402,6 +402,7 @@ function refreshStatusPanels() {
 }
 
 function pauseRealtimePanels() {
+    stopSideTelemetryLoop();
     if (diagnosticAnimFrame) {
         cancelAnimationFrame(diagnosticAnimFrame);
         diagnosticAnimFrame = null;
@@ -414,6 +415,7 @@ function pauseRealtimePanels() {
 
 function resumeRealtimePanels() {
     if (prefersReducedMotion || !AppState.networkOnline) return;
+    startSideTelemetryLoop();
     if (diagnosticActive && !diagnosticAnimFrame) {
         diagnosticLastRender = 0;
         diagnosticAnimFrame = requestAnimationFrame(runDiagnosticLoop);
@@ -973,11 +975,11 @@ function renderDiagnosticBootBioWidget(id, frame, progress) {
 function renderDiagnosticBootWidget(id, label, frame) {
     const progress = Math.max(8, Math.min(99, Math.round(12 + frame * 7.4)));
     if (id === 'diagNetwork') return renderDiagnosticBootRouteWidget(id, frame, progress);
-    if (id === 'diagSecurity') return renderDiagnosticBootProcessWidget(id, frame, progress);
+    if (id === 'diagSecurity') return renderDiagnosticBootContainmentWidget(id, frame, progress);
     if (id === 'diagOutpost') return renderDiagnosticBootRadarWidget(id, frame, progress);
     if (id === 'diagGenerator') return renderDiagnosticBootSignalWidget(id, frame, progress);
     if (id === 'diagPower') return renderDiagnosticBootStatusWidget(id, frame, progress);
-    if (id === 'diagAlarm') return renderDiagnosticBootContainmentWidget(id, frame, progress);
+    if (id === 'diagAlarm') return renderBlackDesertMapDashboardWidget(id, frame, { mode: 'boot', detail: progress / 100, sensorProgress: progress });
     if (id === 'diagLife') return renderDiagnosticBootBioWidget(id, frame, progress);
     renderStatusLinesWidget(id, [`BOOTING ${label}`, `BUS ${glyphProgressBar(progress, 14)} ${progress}%`], frame, { kind: 'diag-boot-fallback' });
 }
@@ -1504,27 +1506,35 @@ function tomographyClass(yNorm) {
 }
 
 function renderTomographyDashboardWidget(id, frame, phase) {
-    const widget = createSvgWidget(id, { cols: 96, rows: 24, cellHeight: 8.5, kind: 'diag-anomaly-tomography-fluid' });
+    const compact = id === 'diagSecurity';
+    const widget = createSvgWidget(id, {
+        cols: compact ? 72 : 96,
+        rows: compact ? 14 : 24,
+        cellHeight: compact ? 10 : 8.5,
+        kind: compact ? 'diag-anomaly-tomography-compact' : 'diag-anomaly-tomography-fluid'
+    });
     if (!widget) return;
     drawDashboardGrid(widget, { className: 'telemetry-cyan', colStep: 6, rowStep: 3 });
     const sliceDepth = Math.round(312 + Math.sin(frame * 0.035) * 18);
-    svgLabel(widget.labelLayer, `FIELD INTENSITY MESH // DEPTH SLICE ${sliceDepth}m`, 2, 2, { className: 'telemetry-amber' });
-    svgLabel(widget.labelLayer, 'INTENSITY', 84, 3, { className: 'telemetry-amber' });
-    svgLabel(widget.labelLayer, 'MAX', 87, 5, { className: 'telemetry-red' });
-    svgLabel(widget.labelLayer, 'MIN', 87, 20, { className: 'telemetry-cyan' });
+    svgLabel(widget.labelLayer, compact ? `FIELD MESH // SLICE ${sliceDepth}m` : `FIELD INTENSITY MESH // DEPTH SLICE ${sliceDepth}m`, 2, 2, { className: 'telemetry-amber' });
+    svgLabel(widget.labelLayer, compact ? 'INT' : 'INTENSITY', compact ? 62 : 84, 3, { className: 'telemetry-amber' });
+    svgLabel(widget.labelLayer, 'MAX', compact ? 65 : 87, compact ? 4.5 : 5, { className: 'telemetry-red' });
+    svgLabel(widget.labelLayer, 'MIN', compact ? 65 : 87, compact ? 12 : 20, { className: 'telemetry-cyan' });
 
-    const startCol = 7;
-    const startRow = 6;
-    const widthCols = 70;
-    const heightRows = 14;
-    const horizontalLines = Math.max(8, Math.round(mixDiagnostic(8, 28, phase.detail)));
-    const verticalLines = Math.max(8, Math.round(mixDiagnostic(8, 30, phase.detail)));
+    const startCol = compact ? 5 : 7;
+    const startRow = compact ? 4 : 6;
+    const widthCols = compact ? 52 : 70;
+    const heightRows = compact ? 8 : 14;
+    const horizontalLines = Math.max(compact ? 6 : 8, Math.round(mixDiagnostic(compact ? 6 : 8, compact ? 15 : 28, phase.detail)));
+    const verticalLines = Math.max(compact ? 6 : 8, Math.round(mixDiagnostic(compact ? 6 : 8, compact ? 16 : 30, phase.detail)));
+    const horizontalSteps = compact ? 64 : 96;
+    const verticalSteps = compact ? 48 : 72;
 
     for (let rowIndex = 0; rowIndex < horizontalLines; rowIndex++) {
         const yNorm = rowIndex / Math.max(1, horizontalLines - 1);
         const points = [];
-        for (let step = 0; step <= 96; step++) {
-            const xNorm = step / 96;
+        for (let step = 0; step <= horizontalSteps; step++) {
+            const xNorm = step / horizontalSteps;
             const height = tomographyHeight(xNorm, yNorm, frame, phase);
             const fluidOffset = Math.sin((xNorm - 0.5) * 8 + frame * 0.045 + yNorm * 5) * 0.55 * phase.detail;
             const col = startCol + xNorm * widthCols + (yNorm - 0.5) * 5 + fluidOffset;
@@ -1540,8 +1550,8 @@ function renderTomographyDashboardWidget(id, frame, phase) {
     for (let colIndex = 0; colIndex < verticalLines; colIndex++) {
         const xNorm = colIndex / Math.max(1, verticalLines - 1);
         const points = [];
-        for (let step = 0; step <= 72; step++) {
-            const yNorm = step / 72;
+        for (let step = 0; step <= verticalSteps; step++) {
+            const yNorm = step / verticalSteps;
             const height = tomographyHeight(xNorm, yNorm, frame, phase);
             const fluidOffset = Math.cos((yNorm - 0.5) * 7 + frame * 0.04 + xNorm * 6) * 0.45 * phase.detail;
             const col = startCol + xNorm * widthCols + (yNorm - 0.5) * 5 + fluidOffset;
@@ -1577,11 +1587,12 @@ function renderTomographyDashboardWidget(id, frame, phase) {
         ['░', 'telemetry-cyan'],
         ['·', 'telemetry-dim']
     ].forEach(([glyph, cls], index) => {
-        svgTextGlyph(widget.glyphLayer, glyph, 86, 6 + index * 2, { className: cls, opacity: 0.92 });
-        svgTextGlyph(widget.glyphLayer, glyph, 87, 6 + index * 2, { className: cls, opacity: 0.78 });
+        const legendRow = compact ? 5 + index : 6 + index * 2;
+        svgTextGlyph(widget.glyphLayer, glyph, compact ? 63 : 86, legendRow, { className: cls, opacity: 0.92 });
+        svgTextGlyph(widget.glyphLayer, glyph, compact ? 64 : 87, legendRow, { className: cls, opacity: 0.78 });
     });
-    svgLabel(widget.labelLayer, `GRID ${Math.round(diagnosticLiveValue(128, 24, phase))}x${Math.round(diagnosticLiveValue(128, 24, phase))}`, 65, 20, { className: 'telemetry-green' });
-    svgLabel(widget.labelLayer, `DRIFT +${(diagnosticLiveValue(2.1, 0.2, phase)).toFixed(1)}`, 2, 20, { className: 'telemetry-amber' });
+    svgLabel(widget.labelLayer, `GRID ${Math.round(diagnosticLiveValue(128, 24, phase))}x${Math.round(diagnosticLiveValue(128, 24, phase))}`, compact ? 45 : 65, compact ? 12 : 20, { className: 'telemetry-green' });
+    svgLabel(widget.labelLayer, `DRIFT +${(diagnosticLiveValue(2.1, 0.2, phase)).toFixed(1)}`, 2, compact ? 12 : 20, { className: 'telemetry-amber' });
     drawDiagnosticPhaseScan(widget, phase, 'TOMOGRAPHY');
 }
 
@@ -1629,6 +1640,264 @@ function renderDataFabricDashboardWidget(id, frame, securityValue, phase) {
     svgLabel(widget.labelLayer, `REF ${statusGet('diagnostic.security.reference', '-20 dBm')}`, 52, 12, { className: 'telemetry-cyan' });
     svgLabel(widget.labelLayer, 'CENTER 1.000 kHz', 18, 13, { className: 'telemetry-green' });
     drawDiagnosticPhaseScan(widget, phase, 'NOISE');
+}
+
+function blackDesertGridPoint(widget, col, row) {
+    return widgetGridPixel(widget, col, row);
+}
+
+const BLACK_DESERT_ISO = {
+    centerCol: 48,
+    centerRow: 12.7,
+    scaleX: 22.5,
+    scaleY: 5.15,
+    heightScale: 2.15
+};
+
+function blackDesertTerrainHeight(x, y, frame, detail = 1) {
+    const drift = prefersReducedMotion ? 0 : frame * 0.012;
+    const duneA = Math.sin((x * 2.8 + y * 1.15 + drift) * Math.PI) * 0.42;
+    const duneB = Math.sin((x * 0.9 - y * 3.1 - drift * 0.7) * Math.PI) * 0.28;
+    const ripple = Math.sin((x + y) * 9 + drift * 7) * 0.07;
+    const westernRidge = Math.exp(-(((x + 0.52) ** 2) / 0.28 + ((y - 0.28) ** 2) / 0.08)) * 0.74;
+    const easternSpines = Math.exp(-(((x - 0.65) ** 2) / 0.1 + ((y + 0.52) ** 2) / 0.05)) * 1.82;
+    const vortexLift = Math.exp(-(((x - 0.2) ** 2) / 0.12 + ((y + 0.06) ** 2) / 0.08)) * 0.38;
+    const vortexBasin = Math.exp(-(((x - 0.18) ** 2) / 0.06 + ((y + 0.04) ** 2) / 0.06)) * -0.34;
+    return Math.max(-0.35, (0.46 + duneA + duneB + ripple + westernRidge + easternSpines + vortexLift + vortexBasin) * detail);
+}
+
+function blackDesertSurfacePoint(widget, x, y, frame, detail = 1, lift = 0) {
+    const z = blackDesertTerrainHeight(x, y, frame, detail) + lift;
+    const col = BLACK_DESERT_ISO.centerCol + (x - y) * BLACK_DESERT_ISO.scaleX;
+    const row = BLACK_DESERT_ISO.centerRow + (x + y) * BLACK_DESERT_ISO.scaleY - z * BLACK_DESERT_ISO.heightScale;
+    return {
+        col,
+        row,
+        point: blackDesertGridPoint(widget, col, row)
+    };
+}
+
+function renderBlackDesertMapLabel(widget, lines, col, row, options = {}) {
+    const labelLines = Array.isArray(lines) ? lines : [lines];
+    labelLines.forEach((line, index) => {
+        svgLabel(widget.labelLayer, line, col, row + index * 0.82, {
+            className: `${index === 0 ? (options.className || 'telemetry-amber') : (options.subClassName || 'telemetry-dim')} telemetry-map-label-strong`,
+            opacity: index === 0 ? 0.98 : 0.9,
+            fontSize: index === 0 ? 8.6 : 7.4
+        });
+    });
+}
+
+function renderBlackDesertZoneOverlay(widget, zone, frame, detail) {
+    const points = zone.points.map(([x, y]) => blackDesertSurfacePoint(widget, x, y, frame, detail, 0.08).point);
+    widget.guideLayer.appendChild(svgElement('polygon', {
+        points: points.map(point => `${Number(point.x).toFixed(1)},${Number(point.y).toFixed(1)}`).join(' '),
+        class: `telemetry-map-zone ${zone.className}`,
+        opacity: zone.opacity ?? 0.28
+    }));
+    svgPolyline(widget.guideLayer, points.concat(points[0]), {
+        className: `${zone.className} telemetry-trace-thin`,
+        opacity: 0.16 + detail * 0.1
+    });
+    renderBlackDesertMapLabel(widget, [zone.label, zone.subLabel], zone.labelCol, zone.labelRow, {
+        className: zone.className,
+        width: zone.width || 16,
+        opacity: 0.72
+    });
+}
+
+function sampleBlackDesertRoute(route, samplesPerSegment = 9) {
+    const samples = [];
+    for (let index = 0; index < route.length - 1; index++) {
+        const [startX, startY] = route[index];
+        const [endX, endY] = route[index + 1];
+        for (let step = 0; step < samplesPerSegment; step++) {
+            const t = step / samplesPerSegment;
+            samples.push([
+                mixDiagnostic(startX, endX, t),
+                mixDiagnostic(startY, endY, t)
+            ]);
+        }
+    }
+    samples.push(route[route.length - 1]);
+    return samples;
+}
+
+function renderBlackDesertRoute(widget, route, frame, options = {}) {
+    const samples = sampleBlackDesertRoute(route, options.samplesPerSegment || 8);
+    const points = samples.map(([x, y]) => blackDesertSurfacePoint(widget, x, y, frame, options.detail || 1, options.lift || 0.16).point);
+    svgPolyline(widget.glyphLayer, points, {
+        className: `${options.className || 'telemetry-amber'} telemetry-trace-thin`,
+        opacity: options.opacity ?? 0.36
+    });
+    if (options.showMarkers === false) return;
+
+    samples.forEach(([x, y], index) => {
+        if (index % (options.markerEvery || 4) !== 0) return;
+        const active = !options.static && !prefersReducedMotion && (index + Math.floor(frame / 2)) % 18 < 3;
+        const projected = blackDesertSurfacePoint(widget, x, y, frame, options.detail || 1, (options.lift || 0.16) + 0.08);
+        svgTextGlyph(widget.glyphLayer, active ? (options.activeGlyph || '◆') : (options.routeGlyph || '·'), projected.col, projected.row, {
+            className: active ? 'telemetry-red' : options.className || 'telemetry-amber',
+            opacity: active ? 0.9 : 0.46
+        });
+    });
+}
+
+function renderBlackDesertSite(widget, site, frame, detail) {
+    const projected = blackDesertSurfacePoint(widget, site.x, site.y, frame, detail, site.lift || 0.34);
+    const pulse = 0;
+    drawSvgGuideCircle(widget, projected.col, projected.row, site.ring || 0.75, {
+        className: site.className || 'telemetry-red',
+        opacity: 0.09 + detail * 0.08
+    });
+    svgTextGlyph(widget.glyphLayer, site.glyph || '◆', projected.col, projected.row, {
+        className: site.className || 'telemetry-red',
+        opacity: 0.66 + detail * 0.24 + pulse * 0.12,
+        fontSize: site.fontSize || 10
+    });
+    drawSvgGuideLine(widget, projected.col, projected.row, site.labelCol - 0.5, site.labelRow, {
+        className: site.className || 'telemetry-red',
+        opacity: 0.18 + detail * 0.09
+    });
+    renderBlackDesertMapLabel(widget, [site.id, site.name], site.labelCol, site.labelRow, {
+        className: site.className || 'telemetry-red',
+        width: site.labelWidth || 12,
+        opacity: 0.8
+    });
+}
+
+function renderBlackDesertTerrainMesh(widget, frame, detail) {
+    const meshRows = Math.round(mixDiagnostic(7, 18, detail));
+    const meshCols = Math.round(mixDiagnostic(7, 15, detail));
+    const sampleCount = Math.round(mixDiagnostic(24, 44, detail));
+    for (let rowIndex = 0; rowIndex < meshRows; rowIndex++) {
+        const y = mixDiagnostic(-0.96, 0.96, rowIndex / Math.max(1, meshRows - 1));
+        const points = [];
+        for (let step = 0; step <= sampleCount; step++) {
+            const x = mixDiagnostic(-0.96, 0.96, step / sampleCount);
+            points.push(blackDesertSurfacePoint(widget, x, y, frame, detail).point);
+        }
+        const cls = y > 0.42 ? 'telemetry-amber' : y > -0.08 ? 'telemetry-green' : 'telemetry-cyan';
+        svgPolyline(widget.guideLayer, points, {
+            className: `${cls} telemetry-trace-thin`,
+            opacity: 0.08 + detail * 0.16
+        });
+    }
+
+    for (let colIndex = 0; colIndex < meshCols; colIndex++) {
+        const x = mixDiagnostic(-0.96, 0.96, colIndex / Math.max(1, meshCols - 1));
+        const points = [];
+        for (let step = 0; step <= 34; step++) {
+            const y = mixDiagnostic(-0.96, 0.96, step / 34);
+            points.push(blackDesertSurfacePoint(widget, x, y, frame, detail).point);
+        }
+        svgPolyline(widget.guideLayer, points, {
+            className: `${x > 0.45 ? 'telemetry-amber' : 'telemetry-cyan'} telemetry-trace-thin`,
+            opacity: 0.04 + detail * 0.075
+        });
+    }
+
+    for (let crest = 0; crest < 7; crest++) {
+        const points = [];
+        const baseY = -0.76 + crest * 0.26;
+        for (let step = 0; step <= 46; step++) {
+            const x = mixDiagnostic(-0.88, 0.86, step / 46);
+            const y = baseY + Math.sin(x * 5.4 + crest * 1.1 + frame * 0.014) * 0.035;
+            points.push(blackDesertSurfacePoint(widget, x, y, frame, detail, 0.13).point);
+        }
+        svgPolyline(widget.glyphLayer, points, {
+            className: `${crest > 4 ? 'telemetry-amber' : 'telemetry-green'} telemetry-trace-thin`,
+            opacity: 0.05 + detail * 0.12
+        });
+    }
+}
+
+function renderBlackDesertMapDashboardWidget(id, frame, phase) {
+    const widget = createSvgWidget(id, { cols: 96, rows: 24, cellHeight: 7, kind: 'diag-black-desert-iso-terrain-map' });
+    if (!widget) return;
+    const staticKey = 'black-desert-mesh-map-static-v4';
+    if (widget.svg.dataset.blackDesertStaticKey === staticKey) return;
+    widget.svg.dataset.blackDesertStaticKey = staticKey;
+
+    const staticFrame = 0;
+    const detail = 1;
+    drawDashboardGrid(widget, { className: 'telemetry-amber', colStep: 8, rowStep: 3 });
+    drawSvgGuideRect(widget, 1, 1, 94, 22, { className: 'telemetry-amber', opacity: 0.12 });
+
+    [
+        {
+            label: 'ZONE A',
+            subLabel: 'CORRIDOR',
+            className: 'telemetry-amber',
+            labelCol: 31,
+            labelRow: 2.3,
+            width: 13,
+            opacity: 0.19,
+            points: [[-0.86, -0.86], [-0.56, -0.96], [0.86, -0.24], [0.92, -0.02], [0.04, 0.12], [-0.72, -0.26]]
+        },
+        {
+            label: 'ZONE B',
+            subLabel: 'THE CLAIM',
+            className: 'telemetry-green',
+            labelCol: 22,
+            labelRow: 10.5,
+            width: 13,
+            opacity: 0.16,
+            points: [[-0.92, -0.18], [-0.42, -0.2], [0.34, 0.26], [0.08, 0.8], [-0.72, 0.74], [-0.96, 0.38]]
+        },
+        {
+            label: 'ZONE C',
+            subLabel: 'THE BLIND',
+            className: 'telemetry-red',
+            labelCol: 72,
+            labelRow: 5.1,
+            width: 13,
+            opacity: 0.14,
+            points: [[0.24, -0.44], [0.96, -0.26], [0.98, 0.86], [0.3, 0.96], [0.06, 0.18]]
+        }
+    ].forEach(zone => renderBlackDesertZoneOverlay(widget, zone, staticFrame, detail));
+
+    renderBlackDesertTerrainMesh(widget, staticFrame, detail);
+
+    const routeA = [[-0.72, -0.68], [-0.36, -0.58], [-0.04, -0.3], [0.2, 0.18], [0.38, 0.52], [0.62, 0.86]];
+    const routeB = [[-0.72, -0.68], [-0.86, -0.2], [-0.76, 0.12], [-0.52, 0.46], [-0.5, 0.72], [-0.04, 0.78], [0.35, 0.84]];
+    const routeC = [[-0.78, 0.12], [-0.38, 0.08], [-0.16, 0.14], [0.22, 0.48], [0.35, 0.84]];
+    renderBlackDesertRoute(widget, routeA, staticFrame, { className: 'telemetry-red', opacity: 0.28 + detail * 0.12, detail, samplesPerSegment: 10, static: true, showMarkers: false });
+    renderBlackDesertRoute(widget, routeB, staticFrame, { className: 'telemetry-amber', opacity: 0.24 + detail * 0.1, detail, samplesPerSegment: 10, static: true, showMarkers: false });
+    renderBlackDesertRoute(widget, routeC, staticFrame, { className: 'telemetry-cyan', opacity: 0.18 + detail * 0.08, detail, samplesPerSegment: 8, markerEvery: 5, static: true, showMarkers: false });
+
+    [
+        { id: 'BRE-01', name: 'GATEHEAD', x: -0.72, y: -0.68, labelCol: 4, labelRow: 3.1, labelWidth: 13, className: 'telemetry-cyan', glyph: '◉', col: 0 },
+        { id: 'BRE-02', name: 'RED HARVEST', x: -0.78, y: 0.12, labelCol: 5, labelRow: 13.1, labelWidth: 15, className: 'telemetry-red', glyph: '◆', col: 2 },
+        { id: 'BRE-03', name: 'FIREWATCH', x: -0.16, y: 0.14, labelCol: 37, labelRow: 4.9, labelWidth: 14, className: 'telemetry-amber', glyph: '◇', col: 3 },
+        { id: 'BRE-04', name: 'BLACKWATER', x: 0.22, y: 0.48, labelCol: 62, labelRow: 13.7, labelWidth: 15, className: 'telemetry-red', glyph: '▣', col: 4 },
+        { id: 'BRE-05', name: 'REFINERY', x: -0.5, y: 0.72, labelCol: 11, labelRow: 20.2, labelWidth: 13, className: 'telemetry-green', glyph: '□', col: 5 },
+        { id: 'BRE-06', name: 'STOCKADE', x: 0.35, y: 0.84, labelCol: 48, labelRow: 21, labelWidth: 13, className: 'telemetry-amber', glyph: '▤', col: 6 },
+        { id: 'VORTEX', name: 'MANA SINK', x: 0.2, y: -0.06, labelCol: 58, labelRow: 7.8, labelWidth: 12, className: 'telemetry-cyan', glyph: '◎', ring: 1.1, col: 7 },
+        { id: 'SPIRES', name: 'LOST SPIRES', x: 0.73, y: 0.56, labelCol: 72, labelRow: 17.4, labelWidth: 14, className: 'telemetry-amber', glyph: '△', col: 8 },
+        { id: 'AZTECH', name: 'ACTIVITY', x: 0.72, y: 0.86, labelCol: 73, labelRow: 21, labelWidth: 12, className: 'telemetry-red', glyph: '☠', ring: 1, col: 9 }
+    ].forEach(site => renderBlackDesertSite(widget, site, staticFrame, detail));
+
+    [
+        { x: -0.68, y: 0.02, glyph: '△', className: 'telemetry-amber' },
+        { x: -0.05, y: 0.42, glyph: '△', className: 'telemetry-amber' },
+        { x: 0.5, y: 0.66, glyph: '△', className: 'telemetry-red' },
+        { x: 0.84, y: 0.36, glyph: '△', className: 'telemetry-red' }
+    ].forEach((hazard, index) => {
+        const point = blackDesertSurfacePoint(widget, hazard.x, hazard.y, staticFrame, detail, 0.28);
+        svgTextGlyph(widget.glyphLayer, hazard.glyph, point.col, point.row, {
+            className: hazard.className,
+            opacity: 0.64 + detail * 0.22
+        });
+    });
+
+    renderFixedGlyphLine(widget.glyphLayer, 22.7, '◉/◆ SITE  △ HAZARD  · ROUTE  ◎ MANA SINK  SHADED ZONES = ACCESS REGIONS', {
+        col: 3,
+        width: 79,
+        className: 'telemetry-dim',
+        opacity: 0.72
+    });
+
 }
 
 function renderLiveEventDashboardWidget(id, frame, values, phase) {
@@ -1769,27 +2038,190 @@ function renderUplinkDashboardWidget(id, frame, values, phase) {
     drawDiagnosticPhaseScan(widget, phase, 'UPLINK');
 }
 
-function renderSideGlyphTelemetry(frame = 0) {
-    const sideDiagnostic = createSvgWidget('sideDiagnosticTelemetry', { cols: 28, rows: 6, kind: 'side-diagnostic' });
-    if (sideDiagnostic) {
-        renderWidgetFrame(sideDiagnostic, { className: AppState.networkOnline ? 'telemetry-green' : 'telemetry-red' });
-        svgLabel(sideDiagnostic.labelLayer, 'SYS BUS', 1, 1, { className: 'telemetry-amber' });
-        for (let col = 1; col < 27; col++) {
-            const level = (Math.sin(frame * 0.2 + col * 0.43) + 1) / 2;
-            svgTextGlyph(sideDiagnostic.glyphLayer, blockGlyph(level), col, 4 - Math.round(level * 2), { className: AppState.networkOnline ? 'telemetry-green' : 'telemetry-red', opacity: AppState.networkOnline ? 0.86 : 0.46 });
-        }
+let sideTelemetryFrame = 0;
+let sideTelemetryAnimFrame = null;
+let sideTelemetryLastRender = 0;
+
+function sideRoutePoint(route, progress) {
+    const clamped = clampDiagnostic(progress, 0, 0.999);
+    const scaled = clamped * (route.length - 1);
+    const index = Math.floor(scaled);
+    const local = scaled - index;
+    const start = route[index];
+    const end = route[Math.min(route.length - 1, index + 1)];
+    return {
+        col: mixDiagnostic(start[0], end[0], local),
+        row: mixDiagnostic(start[1], end[1], local)
+    };
+}
+
+function renderSidePacket(widget, route, frame, offset, options = {}) {
+    const progress = ((frame * (options.speed || 0.035) + offset) % 1 + 1) % 1;
+    const point = sideRoutePoint(route, progress);
+    svgTextGlyph(widget.glyphLayer, options.glyph || '●', Math.round(point.col), Math.round(point.row), {
+        className: options.className || 'telemetry-green',
+        opacity: options.opacity ?? 0.88
+    });
+}
+
+function startSideTelemetryLoop() {
+    if (sideTelemetryAnimFrame || prefersReducedMotion || !AppState.networkOnline) {
+        renderSideGlyphTelemetry(sideTelemetryFrame);
+        return;
+    }
+    sideTelemetryLastRender = 0;
+    sideTelemetryAnimFrame = requestAnimationFrame(runSideTelemetryLoop);
+}
+
+function stopSideTelemetryLoop() {
+    if (!sideTelemetryAnimFrame) return;
+    cancelAnimationFrame(sideTelemetryAnimFrame);
+    sideTelemetryAnimFrame = null;
+}
+
+function runSideTelemetryLoop(timestamp = 0) {
+    if (!AppState.networkOnline || prefersReducedMotion || document.hidden) {
+        sideTelemetryAnimFrame = null;
+        renderSideGlyphTelemetry(sideTelemetryFrame);
+        return;
     }
 
-    const sideFacility = createSvgWidget('sideFacilityTelemetry', { cols: 28, rows: 6, kind: 'side-facility' });
-    if (sideFacility) {
-        renderWidgetFrame(sideFacility, { className: AppState.networkOnline ? 'telemetry-amber' : 'telemetry-red' });
-        const nodeRows = [2, 3, 2, 4];
-        const nodeCols = [5, 13, 21, 13];
-        [[0, 1], [1, 2], [1, 3]].forEach(([a, b]) => drawSvgGuideLine(sideFacility, nodeCols[a], nodeRows[a], nodeCols[b], nodeRows[b], { className: 'telemetry-amber', opacity: 0.18 }));
-        nodeCols.forEach((col, index) => svgTextGlyph(sideFacility.glyphLayer, index === 3 ? '◇' : '□', col, nodeRows[index], { className: index === 3 ? 'telemetry-red' : 'telemetry-amber' }));
-        const packetCol = 5 + ((frame % 16));
-        svgTextGlyph(sideFacility.glyphLayer, AppState.networkOnline ? '●' : '◆', packetCol, packetCol > 13 ? 3 : 2, { className: AppState.networkOnline ? 'telemetry-green' : 'telemetry-red', opacity: AppState.networkOnline ? 0.9 : 0.45 });
+    const interval = effectsFrameMs(80, 140, 180);
+    if (!sideTelemetryLastRender || timestamp - sideTelemetryLastRender >= interval) {
+        sideTelemetryLastRender = timestamp;
+        sideTelemetryFrame++;
+        renderSideGlyphTelemetry(sideTelemetryFrame);
     }
+    sideTelemetryAnimFrame = requestAnimationFrame(runSideTelemetryLoop);
+}
+
+function renderSideDiagnosticPreview(frame = 0) {
+    const widget = createSvgWidget('sideDiagnosticTelemetry', { cols: 36, rows: 9, cellHeight: 10, kind: 'side-diagnostic-live-svg' });
+    if (!widget) return;
+    drawDashboardGrid(widget, {
+        className: AppState.networkOnline ? 'telemetry-green' : 'telemetry-red',
+        colStep: 4,
+        rowStep: 2
+    });
+    svgLabel(widget.labelLayer, 'DIAGNOSTIC BUS', 2, 1, { className: AppState.networkOnline ? 'telemetry-amber' : 'telemetry-red' });
+
+    if (!AppState.networkOnline) {
+        renderFixedGlyphLine(widget.glyphLayer, 4, 'NO CARRIER // SENSOR BUS PAUSED', {
+            col: 3,
+            width: 31,
+            className: 'telemetry-red',
+            opacity: 0.86
+        });
+        drawSvgGuideLine(widget, 3, 6, 33, 6, { className: 'telemetry-red', opacity: 0.28 });
+        return;
+    }
+
+    const traceA = [];
+    const traceB = [];
+    for (let index = 0; index <= 29; index++) {
+        const col = 3 + index;
+        const phase = frame * 0.1 + index * 0.34;
+        const a = Math.sin(phase) * 0.74 + Math.sin(phase * 2.1 + 0.8) * 0.22 + Math.sin(index * 1.7 + frame * 0.045) * 0.09;
+        const b = Math.cos(phase * 0.83 + 1.4) * 0.58 + Math.sin(phase * 2.7) * 0.18;
+        traceA.push(widgetGridPixel(widget, col, 3.05 - a));
+        traceB.push(widgetGridPixel(widget, col, 5.55 - b));
+    }
+    svgPolyline(widget.glyphLayer, traceA, { className: 'telemetry-green telemetry-trace-thin', opacity: 0.92 });
+    svgPolyline(widget.glyphLayer, traceB, { className: 'telemetry-cyan telemetry-trace-thin', opacity: 0.86 });
+    drawSvgGuideLine(widget, 3, 4.35, 33, 4.35, { className: 'telemetry-amber', opacity: 0.12 });
+
+    const cursorCol = 3 + (frame % 30);
+    drawSvgGuideLine(widget, cursorCol, 2, cursorCol, 6.8, { className: 'telemetry-amber', opacity: 0.18 });
+    svgTextGlyph(widget.glyphLayer, '◆', cursorCol, 2, { className: 'telemetry-amber', opacity: 0.9 });
+    svgLabel(widget.labelLayer, 'A', 33, 3, { className: 'telemetry-green' });
+    svgLabel(widget.labelLayer, 'B', 33, 5.6, { className: 'telemetry-cyan' });
+
+    for (let col = 3; col <= 33; col++) {
+        const level = clampDiagnostic((Math.sin(frame * 0.08 + col * 0.55) + Math.sin(col * 1.3) + 2) / 4);
+        const cls = level > 0.82 ? 'telemetry-red' : level > 0.62 ? 'telemetry-amber' : level > 0.42 ? 'telemetry-green' : 'telemetry-cyan';
+        svgTextGlyph(widget.glyphLayer, densityGlyph(level), col, 8, { className: cls, opacity: 0.42 + level * 0.44 });
+    }
+    svgLabel(widget.labelLayer, `${Math.round(68 + Math.sin(frame * 0.07) * 6)}%`, 29, 1, { className: 'telemetry-green' });
+}
+
+function renderSideFacilityPreview(frame = 0) {
+    const widget = createSvgWidget('sideFacilityTelemetry', { cols: 36, rows: 9, cellHeight: 10, kind: 'side-facility-live-svg' });
+    if (!widget) return;
+    drawDashboardGrid(widget, {
+        className: AppState.networkOnline ? 'telemetry-amber' : 'telemetry-red',
+        colStep: 6,
+        rowStep: 2
+    });
+    svgLabel(widget.labelLayer, 'FACILITY MESH', 2, 1, { className: AppState.networkOnline ? 'telemetry-amber' : 'telemetry-red' });
+
+    const nodes = [
+        { id: 'CORE', col: 18, row: 4.4, glyph: '◇', className: 'telemetry-green' },
+        { id: 'LAB', col: 8, row: 2.4, glyph: '□', className: 'telemetry-cyan' },
+        { id: 'SEC', col: 28, row: 2.6, glyph: '△', className: 'telemetry-amber' },
+        { id: 'GEN', col: 7, row: 6.4, glyph: '○', className: 'telemetry-amber' },
+        { id: 'GATE', col: 29, row: 6.1, glyph: '◇', className: 'telemetry-red' },
+        { id: 'HAB', col: 18, row: 7.1, glyph: '□', className: 'telemetry-green' }
+    ];
+    const byId = Object.fromEntries(nodes.map(node => [node.id, node]));
+    const links = [
+        ['CORE', 'LAB', 'telemetry-cyan'],
+        ['CORE', 'SEC', 'telemetry-amber'],
+        ['CORE', 'GEN', 'telemetry-amber'],
+        ['CORE', 'GATE', 'telemetry-red'],
+        ['CORE', 'HAB', 'telemetry-green'],
+        ['LAB', 'SEC', 'telemetry-cyan'],
+        ['GEN', 'HAB', 'telemetry-green']
+    ];
+
+    links.forEach(([from, to, cls]) => {
+        const start = byId[from];
+        const end = byId[to];
+        drawSvgGuideLine(widget, start.col, start.row, end.col, end.row, {
+            className: AppState.networkOnline ? cls : 'telemetry-red',
+            opacity: cls === 'telemetry-red' ? 0.28 : 0.18
+        });
+    });
+    drawSvgGuideCircle(widget, byId.CORE.col, byId.CORE.row, 4.6, { className: AppState.networkOnline ? 'telemetry-green' : 'telemetry-red', opacity: 0.08 });
+
+    nodes.forEach(node => {
+        const pulse = AppState.networkOnline && !prefersReducedMotion ? (Math.sin(frame * 0.12 + node.col) + 1) * 0.14 : 0;
+        svgTextGlyph(widget.glyphLayer, node.glyph, node.col, node.row, {
+            className: AppState.networkOnline ? node.className : 'telemetry-red',
+            opacity: AppState.networkOnline ? 0.74 + pulse : 0.44
+        });
+        svgLabel(widget.labelLayer, node.id, node.col + 1, node.row - 0.35, {
+            className: AppState.networkOnline ? node.className : 'telemetry-red',
+            opacity: AppState.networkOnline ? 0.78 : 0.48
+        });
+    });
+
+    if (!AppState.networkOnline) {
+        renderFixedGlyphLine(widget.glyphLayer, 8, 'NET OFFLINE // MAP HOLD', {
+            col: 4,
+            width: 28,
+            className: 'telemetry-red',
+            opacity: 0.88
+        });
+        return;
+    }
+
+    renderSidePacket(widget, [[8, 2.4], [18, 4.4], [28, 2.6]], frame, 0.0, { glyph: '●', className: 'telemetry-cyan', speed: 0.028 });
+    renderSidePacket(widget, [[7, 6.4], [18, 4.4], [29, 6.1]], frame, 0.37, { glyph: '◆', className: 'telemetry-red', speed: 0.022, opacity: 0.72 });
+    renderSidePacket(widget, [[18, 7.1], [18, 4.4], [8, 2.4]], frame, 0.68, { glyph: '●', className: 'telemetry-green', speed: 0.033 });
+
+    for (let col = 4; col <= 32; col++) {
+        const active = ((col + Math.floor(frame / 2)) % 9) < 5;
+        const cls = col > 25 ? 'telemetry-red' : col > 18 ? 'telemetry-amber' : 'telemetry-green';
+        svgTextGlyph(widget.glyphLayer, active ? '█' : '░', col, 8, {
+            className: active ? cls : 'telemetry-dim',
+            opacity: active ? 0.72 : 0.24
+        });
+    }
+}
+
+function renderSideGlyphTelemetry(frame = 0) {
+    renderSideDiagnosticPreview(frame);
+    renderSideFacilityPreview(frame);
 }
 
 function renderDiagnosticDashboard() {
@@ -1804,7 +2236,6 @@ function renderDiagnosticDashboard() {
     diagText('diagnosticMeta', meta);
 
     const network = statusNumber('diagnostic.network.level', 69 + Math.round(Math.sin(phase * 0.31) * 5), 0, 100);
-    const security = statusNumber('diagnostic.security.level', 81 + Math.round(Math.sin(phase * 0.18) * 4), 0, 100);
     const generator = statusNumber('diagnostic.generator.level', 62 + Math.round(Math.sin(phase * 0.22) * 6), 0, 100);
     const mainPower = statusNumber('diagnostic.power.main', 61 + Math.round(Math.sin(phase * 0.16) * 4), 0, 100);
     const reservePower = statusNumber('diagnostic.power.reserve', 34 + Math.round(Math.cos(phase * 0.12) * 5), 0, 100);
@@ -1820,10 +2251,10 @@ function renderDiagnosticDashboard() {
     diagText('diagNetworkStatus', diagnosticStatusText(networkStatus === 'DISCONNECTED' ? 'NOISE' : networkStatus, phaseInfo, 'SCAN', 'SYNC'));
     renderSpectrumDashboardWidget('diagNetwork', phase, network, phaseInfo);
 
-    const securityStatus = statusGet('diagnostic.security.status', 'NOISE').toUpperCase();
-    diagCardState('diagSecurityCard', phaseInfo.mode === 'live' ? statusState('diagnostic.security.state', 'warn') : 'ok');
-    diagText('diagSecurityStatus', diagnosticStatusText(securityStatus === 'ARMED' ? 'NOISE' : securityStatus, phaseInfo, 'SCAN', 'PEAK'));
-    renderDataFabricDashboardWidget('diagSecurity', phase, security, phaseInfo);
+    const securityStatus = statusGet('diagnostic.alarm.status', 'DIS DEGRADED').toUpperCase();
+    diagCardState('diagSecurityCard', phaseInfo.mode === 'live' ? statusState('diagnostic.alarm.state', 'warn') : 'ok');
+    diagText('diagSecurityStatus', diagnosticStatusText(securityStatus === 'DIS DEGRADED' ? 'ELEVATED' : securityStatus, phaseInfo, 'SOLVE', 'MESH'));
+    renderTomographyDashboardWidget('diagSecurity', phase, phaseInfo);
 
     const outpostStatus = statusGet('diagnostic.outposts.status', 'LINK DEGRADED').toUpperCase();
     diagCardState('diagOutpostCard', phaseInfo.mode === 'live' ? statusState('diagnostic.outposts.state', 'warn') : 'ok');
@@ -1840,10 +2271,10 @@ function renderDiagnosticDashboard() {
     diagText('diagPowerStatus', diagnosticStatusText(powerStatus, phaseInfo, 'BUS', 'LOAD'));
     renderReactorSyncDashboardWidget('diagPower', phase, { output: reactorOutput, sync: syncIntegrity, mainPower, reservePower }, phaseInfo);
 
-    const alarmStatus = statusGet('diagnostic.alarm.status', 'DIS DEGRADED').toUpperCase();
-    diagCardState('diagAlarmCard', phaseInfo.mode === 'live' ? statusState('diagnostic.alarm.state', 'warn') : 'ok');
-    diagText('diagAlarmStatus', diagnosticStatusText(alarmStatus === 'DIS DEGRADED' ? 'ELEVATED' : alarmStatus, phaseInfo, 'SOLVE', 'MESH'));
-    renderTomographyDashboardWidget('diagAlarm', phase, phaseInfo);
+    const alarmStatus = statusGet('diagnostic.security.status', 'MESH').toUpperCase();
+    diagCardState('diagAlarmCard', phaseInfo.mode === 'live' ? statusState('diagnostic.security.state', 'warn') : 'ok');
+    diagText('diagAlarmStatus', diagnosticStatusText(alarmStatus === 'ARMED' ? 'MESH' : alarmStatus, phaseInfo, 'MAP', 'MESH'));
+    renderBlackDesertMapDashboardWidget('diagAlarm', phase, phaseInfo);
 
     const lifeStatus = statusGet('diagnostic.life.status', `${unknownLife} UNKNOWN`).toUpperCase();
     diagCardState('diagLifeCard', phaseInfo.mode === 'live' ? statusState('diagnostic.life.state', 'alert') : 'ok');
@@ -1869,12 +2300,12 @@ function renderDiagnosticDashboard() {
             ? `SENSOR BOOT COMPLETE // BLENDING CALIBRATION GRAPHS INTO LIVE TELEMETRY ${asciiSweep(phase, 18)}`
             : statusInterpolate(statusGet('diagnostic.ticker', defaultTicker), phase);
     diagText('diagnosticTicker', phaseTicker);
-    renderSideGlyphTelemetry(phase);
+    if (!sideTelemetryAnimFrame) renderSideGlyphTelemetry(phase);
 }
 
 function runDiagnosticLoop(timestamp = 0) {
     if (!diagnosticActive || !AppState.networkOnline) return;
-    const interval = effectsFrameMs(45, 90, 140);
+    const interval = effectsFrameMs(80, 140, 180);
     if (!diagnosticLastRender || timestamp - diagnosticLastRender >= interval) {
         diagnosticLastRender = timestamp;
         diagnosticFrame++;
