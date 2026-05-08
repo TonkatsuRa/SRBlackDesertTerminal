@@ -34,6 +34,12 @@ body {
     --shell-right-col: clamp(160px, 13.3vw, 231px);
     --shell-main-col: minmax(420px, 1fr);
     --shell-gap: 12px;
+    --side-card-pad-y: clamp(7px, 0.9vh, 10px);
+    --side-heading-gap: clamp(4px, 0.7vh, 8px);
+    --side-overview-height: clamp(78px, 12vh, 124px);
+    --side-signal-height: clamp(54px, 7.5vh, 82px);
+    --side-preview-height: clamp(50px, 7.8vh, 76px);
+    --side-action-button-height: clamp(31px, 4vh, 38px);
     position: relative;
     width: 100%;
     height: 100%;
@@ -599,14 +605,14 @@ body {
 
 .system-sidebar {
     padding: 0;
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr);
     overflow-x: hidden;
-    overflow-y: auto;
+    overflow-y: hidden;
+    min-height: 0;
 }
 
 .facility-overview-card {
-    flex: 0 0 auto;
     overflow: hidden;
 }
 
@@ -614,13 +620,15 @@ body {
     border-width: 0 0 1px;
     clip-path: none;
     box-shadow: none;
-    padding: 11px 10px;
+    padding: var(--side-card-pad-y) 10px;
     background: rgba(0, 18, 0, 0.42);
     min-width: 0;
+    min-height: 0;
+    overflow: hidden;
 }
 
 .side-card h2 {
-    margin: 0 0 9px;
+    margin: 0 0 var(--side-heading-gap);
     color: var(--phosphor);
     font-size: clamp(10px, 0.72vw, 12px);
     font-weight: 400;
@@ -629,7 +637,7 @@ body {
 
 .mini-wireframe {
     position: relative;
-    height: clamp(96px, 15vh, 138px);
+    height: var(--side-overview-height);
     border: 1px solid rgba(57, 255, 20, 0.25);
     background:
         linear-gradient(rgba(57, 255, 20, 0.05) 1px, transparent 1px),
@@ -673,40 +681,42 @@ body {
 }
 
 .signal-spectrum-card {
-    flex: 0 0 auto;
+    overflow: hidden;
 }
 
 .signal-spectrum-widget {
-    height: 92px;
-    min-height: 92px;
+    height: var(--side-signal-height);
+    min-height: 0;
     padding: 0;
 }
 
 .signal-spectrum-widget .telemetry-svg {
-    height: 92px;
-    min-height: 92px;
+    height: 100%;
+    min-height: 0;
 }
 
 .right-actions-card {
-    flex: 0 0 auto;
     display: grid;
-    grid-template-rows: auto auto auto;
-    gap: 8px;
+    grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
+    gap: clamp(5px, 0.8vh, 8px);
     min-height: 0;
+    overflow: hidden;
 }
 
 .side-action-module {
     width: 100%;
     min-height: 0;
     display: grid;
-    grid-template-rows: auto 86px;
-    gap: 6px;
+    grid-template-rows: var(--side-action-button-height) minmax(0, var(--side-preview-height));
+    gap: clamp(4px, 0.7vh, 6px);
     align-items: stretch;
+    overflow: hidden;
 }
 
 .side-action-button {
     width: 100%;
-    min-height: 38px;
+    min-height: 0;
+    height: var(--side-action-button-height);
     border: 1px solid rgba(57, 255, 20, 0.32);
     background: rgba(57, 255, 20, 0.06);
     color: var(--phosphor);
@@ -756,14 +766,14 @@ body {
 }
 
 .side-glyph-widget {
-    height: 86px;
-    min-height: 86px;
+    height: 100%;
+    min-height: 0;
     padding: 0;
 }
 
 .side-glyph-widget .telemetry-svg {
-    height: 86px;
-    min-height: 86px;
+    height: 100%;
+    min-height: 0;
 }
 
 .diag-ascii {
@@ -1122,6 +1132,10 @@ body.network-offline .side-ascii {
         --shell-left-col: 1fr;
         --shell-right-col: 1fr;
         --shell-main-col: 1fr;
+        --side-overview-height: clamp(112px, 24vh, 168px);
+        --side-signal-height: 92px;
+        --side-preview-height: 92px;
+        --side-action-button-height: 40px;
         min-height: var(--viewport-height);
         height: auto;
         grid-template-rows: auto auto auto;
@@ -1177,11 +1191,23 @@ body.network-offline .side-ascii {
     }
 
     .system-sidebar {
+        display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        grid-template-rows: auto;
+        grid-template-rows: auto auto;
+        overflow: visible;
     }
 
     .facility-overview-card {
+        grid-column: 1 / -1;
+    }
+
+    .right-actions-card {
+        grid-column: 1 / -1;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-rows: auto minmax(0, auto);
+    }
+
+    .right-actions-card h2 {
         grid-column: 1 / -1;
     }
 
@@ -1294,6 +1320,11 @@ body.network-offline .side-ascii {
 
     .system-sidebar {
         grid-template-columns: 1fr;
+    }
+
+    .right-actions-card {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto auto;
     }
 
     .command-bar {

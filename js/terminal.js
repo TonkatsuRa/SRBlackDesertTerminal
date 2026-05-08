@@ -17,6 +17,7 @@ function initTerminal() {
     setSystemStatusVisual(true);
     clearOutput({ force: true });
     showWelcome();
+    scheduleHologramStart(180);
     updateMenuSelection();
     updateDatabaseSlotIndicators();
     syncAppStateFromLegacy({ resetSelection: false });
