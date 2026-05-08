@@ -108,26 +108,46 @@
             </div>
             <div class="facility-layout">
                 <div class="facility-map-wrap">
-                    <div id="facilityCanvas" class="facility-svg-host" role="img" aria-label="SVG glyph-backed facility network topology"></div>
+                    <canvas id="facilityAtmosphereCanvas" class="facility-atmosphere-canvas" aria-hidden="true"></canvas>
+                    <div id="facilityCanvas" class="facility-svg-host" role="img" aria-label="SVG facility command center map"></div>
                     <div class="facility-map-hud">
-                        <span>BDR-01 GLYPH TOPOLOGY OVERVIEW</span>
-                        <span id="facilityScanStatus">SCAN READY</span>
+                        <span>ARES COMMAND CENTER // BDR-01</span>
+                        <span id="facilityScanStatus">MAP READY</span>
                     </div>
                 </div>
                 <div class="facility-sidebar">
                     <div class="facility-card">
-                        <div class="facility-card-title">BASE GRID</div>
+                        <div class="facility-card-title">POWER GRID</div>
                         <pre class="facility-readout" id="facilityOverview"></pre>
                     </div>
                     <div class="facility-card">
-                        <div class="facility-card-title">ZONE STATUS</div>
+                        <div class="facility-card-title">LIFE SUPPORT</div>
+                        <pre class="facility-readout" id="facilityLifeSupport"></pre>
+                    </div>
+                    <div class="facility-card">
+                        <div class="facility-card-title">SECURITY</div>
                         <pre class="facility-readout" id="facilityZones"></pre>
                     </div>
                     <div class="facility-card">
-                        <div class="facility-card-title">CONTACTS / FAULTS</div>
+                        <div class="facility-card-title">CONTAINMENT</div>
+                        <pre class="facility-readout" id="facilityContainment"></pre>
+                    </div>
+                    <div class="facility-card">
+                        <div class="facility-card-title">UPLINK</div>
+                        <pre class="facility-readout" id="facilityUplink"></pre>
+                    </div>
+                    <div class="facility-card">
+                        <div class="facility-card-title">UNKNOWN CONTACTS</div>
                         <pre class="facility-readout" id="facilityContacts"></pre>
                     </div>
                 </div>
+            </div>
+            <div class="facility-telemetry-strip" id="facilityTelemetryStrip">
+                <span>STRUCTURE --</span>
+                <span>POWER --</span>
+                <span>RESERVE --</span>
+                <span>FAULTS --</span>
+                <span>BIO --</span>
             </div>
             <div class="facility-footer">
                 <span id="facilityTicker">FACILITY GRID WAITING</span>

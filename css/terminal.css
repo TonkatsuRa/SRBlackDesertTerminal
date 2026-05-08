@@ -904,7 +904,7 @@ body.terminal-typing .terminal-typewriter-active::after {
     inset: 0;
     z-index: 225;
     background:
-        radial-gradient(circle at 46% 28%, rgba(0, 212, 170, 0.075), transparent 34%),
+        radial-gradient(circle at 46% 28%, rgba(57, 255, 20, 0.055), transparent 34%),
         rgba(0, 0, 0, 0.91);
     align-items: center;
     justify-content: center;
@@ -914,19 +914,19 @@ body.terminal-typing .terminal-typewriter-active::after {
 .facility-overlay.active { display: flex; }
 
 .facility-panel {
-    width: min(1120px, 100%);
-    height: min(760px, calc(var(--viewport-height) - 36px));
-    border: 1px solid rgba(0, 212, 170, 0.68);
+    width: min(1320px, 100%);
+    height: min(820px, calc(var(--viewport-height) - 36px));
+    border: 1px solid rgba(57, 255, 20, 0.48);
     background:
-        linear-gradient(90deg, rgba(0, 212, 170, 0.04), transparent 30%),
-        linear-gradient(180deg, rgba(32, 194, 14, 0.055), rgba(0, 0, 0, 0.12)),
+        linear-gradient(90deg, rgba(57, 255, 20, 0.045), transparent 30%),
+        linear-gradient(180deg, rgba(32, 194, 14, 0.055), rgba(0, 0, 0, 0.18)),
         rgba(2, 10, 6, 0.98);
     display: flex;
     flex-direction: column;
     overflow: hidden;
     box-shadow:
-        inset 0 0 46px rgba(0, 212, 170, 0.07),
-        0 0 46px rgba(0, 212, 170, 0.11);
+        inset 0 0 44px rgba(57, 255, 20, 0.055),
+        0 0 42px rgba(57, 255, 20, 0.08);
     contain: layout paint style;
 }
 
@@ -936,12 +936,12 @@ body.terminal-typing .terminal-typewriter-active::after {
     justify-content: space-between;
     gap: 12px;
     padding: 12px 14px;
-    border-bottom: 1px solid rgba(0, 212, 170, 0.38);
-    background: rgba(0, 18, 10, 0.5);
+    border-bottom: 1px solid rgba(57, 255, 20, 0.28);
+    background: rgba(0, 18, 5, 0.56);
 }
 
 .facility-title {
-    color: var(--cyan);
+    color: var(--phosphor);
     letter-spacing: 2px;
     font-size: var(--font-size-title);
 }
@@ -954,9 +954,9 @@ body.terminal-typing .terminal-typewriter-active::after {
 }
 
 .facility-close {
-    border: 1px solid rgba(0, 212, 170, 0.5);
-    background: rgba(0, 20, 14, 0.78);
-    color: var(--cyan);
+    border: 1px solid rgba(57, 255, 20, 0.42);
+    background: rgba(0, 20, 8, 0.78);
+    color: var(--phosphor);
     font-family: var(--terminal-font);
     font-size: var(--font-size-small);
     padding: 7px 10px;
@@ -969,7 +969,7 @@ body.terminal-typing .terminal-typewriter-active::after {
     flex: 1;
     min-height: 0;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+    grid-template-columns: minmax(0, 1.25fr) minmax(340px, 0.72fr);
     gap: 10px;
     padding: 10px;
 }
@@ -977,9 +977,9 @@ body.terminal-typing .terminal-typewriter-active::after {
 .facility-map-wrap {
     position: relative;
     min-height: 0;
-    border: 1px solid rgba(32, 194, 14, 0.28);
+    border: 1px solid rgba(57, 255, 20, 0.28);
     background:
-        radial-gradient(circle at 50% 50%, rgba(32, 194, 14, 0.075), transparent 58%),
+        radial-gradient(circle at 50% 50%, rgba(57, 255, 20, 0.06), transparent 58%),
         repeating-linear-gradient(0deg, rgba(32, 194, 14, 0.04), rgba(32, 194, 14, 0.04) 1px, transparent 1px, transparent 18px),
         repeating-linear-gradient(90deg, rgba(32, 194, 14, 0.03), rgba(32, 194, 14, 0.03) 1px, transparent 1px, transparent 18px),
         rgba(0, 7, 3, 0.78);
@@ -987,7 +987,21 @@ body.terminal-typing .terminal-typewriter-active::after {
     contain: layout paint style;
 }
 
+.facility-atmosphere-canvas {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    pointer-events: none;
+    opacity: 0.55;
+}
+
 #facilityCanvas {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
     display: block;
     width: 100%;
     height: 100%;
@@ -1010,41 +1024,61 @@ body.terminal-typing .terminal-typewriter-active::after {
     font-size: var(--font-size-tiny);
     pointer-events: none;
     opacity: 0.82;
+    z-index: 2;
 }
 
 .facility-sidebar {
     min-height: 0;
     display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-rows: repeat(3, minmax(0, 1fr));
     gap: 8px;
 }
 
 .facility-card {
-    border: 1px solid rgba(0, 212, 170, 0.26);
+    border: 1px solid rgba(32, 194, 14, 0.26);
     background:
-        linear-gradient(180deg, rgba(0, 212, 170, 0.055), transparent 55%),
-        rgba(0, 10, 7, 0.72);
-    padding: 9px 10px;
+        linear-gradient(180deg, rgba(57, 255, 20, 0.045), transparent 55%),
+        rgba(0, 10, 4, 0.76);
+    padding: 8px 9px;
     overflow: hidden;
+    box-shadow: inset 0 0 0 1px rgba(57, 255, 20, 0.055);
     contain: layout paint style;
 }
 
 .facility-card-title {
     color: var(--amber);
     letter-spacing: 1px;
-    border-bottom: 1px solid rgba(0, 212, 170, 0.16);
-    padding-bottom: 4px;
-    margin-bottom: 6px;
-    font-size: var(--font-size-small);
+    border-bottom: 1px solid rgba(57, 255, 20, 0.16);
+    padding-bottom: 3px;
+    margin-bottom: 5px;
+    font-size: clamp(9px, 0.7vw, 11px);
 }
 
 .facility-readout {
     margin: 0;
     color: var(--phosphor);
     font-family: var(--terminal-font);
-    font-size: var(--font-size-small);
-    line-height: 1.22;
+    font-size: clamp(9px, 0.66vw, 11px);
+    line-height: 1.16;
     white-space: pre;
+    overflow: hidden;
+}
+
+.facility-telemetry-strip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border-top: 1px solid rgba(57, 255, 20, 0.18);
+    padding: 7px 12px;
+    min-height: 31px;
+    color: var(--amber);
+    background: rgba(0, 14, 5, 0.38);
+    font-family: var(--terminal-font);
+    font-size: clamp(9px, 0.7vw, 11px);
+    letter-spacing: 0.04em;
+    white-space: nowrap;
     overflow: hidden;
 }
 
@@ -1052,12 +1086,23 @@ body.terminal-typing .terminal-typewriter-active::after {
     display: flex;
     justify-content: space-between;
     gap: 12px;
-    border-top: 1px solid rgba(0, 212, 170, 0.2);
-    padding: 9px 12px;
-    color: var(--cyan);
+    border-top: 1px solid rgba(57, 255, 20, 0.2);
+    padding: 8px 12px;
+    color: var(--phosphor);
     font-size: var(--font-size-small);
-    background: rgba(0, 14, 9, 0.44);
-    min-height: 40px;
+    background: rgba(0, 14, 5, 0.44);
+    min-height: 38px;
+}
+
+.facility-zone-shape {
+    fill: currentColor;
+    stroke: currentColor;
+    stroke-width: 0.8;
+    vector-effect: non-scaling-stroke;
+}
+
+.facility-command-center-alert {
+    color: var(--red);
 }
 
 @media (max-width: 820px) {
@@ -1068,14 +1113,30 @@ body.terminal-typing .terminal-typewriter-active::after {
     .facility-header { align-items: flex-start; flex-wrap: wrap; }
     .facility-layout {
         grid-template-columns: 1fr;
-        grid-template-rows: minmax(310px, 1fr) auto;
+        grid-template-rows: minmax(300px, 52vh) auto;
         overflow: auto;
     }
     .facility-sidebar {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         grid-template-rows: none;
     }
     .facility-readout {
         font-size: 10px;
+    }
+    .facility-telemetry-strip {
+        overflow-x: auto;
+        scrollbar-width: thin;
+    }
+}
+
+@media (max-width: 560px) {
+    .facility-sidebar {
+        grid-template-columns: 1fr;
+    }
+
+    .facility-map-hud,
+    .facility-footer {
+        flex-wrap: wrap;
     }
 }
 
