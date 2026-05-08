@@ -393,7 +393,8 @@ function statusBlock(prefix, fallbackLines, frame) {
 function refreshStatusPanels() {
     if (diagnosticActive) {
         diagnosticFrame = Math.max(diagnosticFrame, 48);
-        renderDiagnosticDashboard();
+        resetDiagnosticWidgetRegistry();
+        renderDiagnosticDashboard(performance.now(), { force: true });
     }
     if (facilityActive) {
         facilityFrame = Math.max(facilityFrame, prefersReducedMotion ? 24 : 10);
@@ -1185,6 +1186,57 @@ function drawDiagnosticPhaseScan(widget, phase, label) {
     });
 }
 
+const DIAGNOSTIC_WIDGET_REGISTRY = new Map();
+
+function diagnosticRenderProfile() {
+    return typeof getEffectiveRenderProfile === 'function'
+        ? getEffectiveRenderProfile()
+        : { name: 'fallback', schedulerMs: 120, sideTelemetryMs: 180, facilityMs: 140, radar: { frameMs: 120, sweepTrail: 5, clutterCount: 8, contactLabels: true, glow: false, pulse: true } };
+}
+
+function diagnosticWidgetInterval(widgetId, fallbackMs = 160) {
+    return typeof getRenderWidgetInterval === 'function'
+        ? getRenderWidgetInterval(widgetId, fallbackMs)
+        : fallbackMs;
+}
+
+function resetDiagnosticWidgetRegistry() {
+    DIAGNOSTIC_WIDGET_REGISTRY.clear();
+}
+
+function renderDiagnosticWidget(widgetId, timestamp, renderCallback, options = {}) {
+    const now = Number.isFinite(timestamp) ? timestamp : performance.now();
+    const record = DIAGNOSTIC_WIDGET_REGISTRY.get(widgetId) || { lastRenderAt: 0, renders: 0 };
+    const interval = options.interval ?? diagnosticWidgetInterval(widgetId, 160);
+    const force = options.force || record.renders === 0 || prefersReducedMotion;
+    if (!force && now - record.lastRenderAt < interval) return false;
+
+    renderCallback();
+    record.lastRenderAt = now;
+    record.renders++;
+    DIAGNOSTIC_WIDGET_REGISTRY.set(widgetId, record);
+    return true;
+}
+
+function setSvgTextElement(text, glyph, col, row, options = {}) {
+    if (!text) return;
+    const cellWidth = Number(options.cellWidth || text.parentNode?.dataset?.cellWidth || GLYPH_CELL_WIDTH);
+    const cellHeight = Number(options.cellHeight || text.parentNode?.dataset?.cellHeight || GLYPH_CELL_HEIGHT);
+    const point = gridPoint(col, row, cellWidth, cellHeight);
+    text.setAttribute('x', point.x);
+    text.setAttribute('y', point.y);
+    text.textContent = String(glyph ?? '');
+    if (options.className) text.setAttribute('class', `telemetry-glyph ${options.className}`.trim());
+    if (options.opacity !== undefined) text.setAttribute('opacity', String(options.opacity));
+}
+
+function setSvgLabelElement(label, text, options = {}) {
+    if (!label) return;
+    label.textContent = String(text ?? '');
+    if (options.className) label.setAttribute('class', `telemetry-label ${options.className}`.trim());
+    if (options.opacity !== undefined) label.setAttribute('opacity', String(options.opacity));
+}
+
 function widgetGridPixel(widget, col, row) {
     return gridPoint(col, row, widget.cellWidth, widget.cellHeight);
 }
@@ -1337,25 +1389,77 @@ function renderBioscanArrayDashboardWidget(id, frame, stats, phase) {
 function renderTacticalRadarDashboardWidget(id, frame, phase) {
     const widget = createSvgWidget(id, { cols: 60, rows: 16, cellHeight: 9, kind: 'diag-tactical-radar-safe' });
     if (!widget) return;
-    drawDashboardGrid(widget, { className: 'telemetry-cyan', colStep: 8, rowStep: 4 });
+    const profile = diagnosticRenderProfile();
+    const radarProfile = profile.radar || {};
     const centerCol = 25;
     const centerRow = 8;
-    [2, 3.5, 5, 6.5].forEach(radius => drawSvgGuideCircle(widget, centerCol, centerRow, radius, { opacity: 0.08 + phase.detail * 0.04, className: 'telemetry-green' }));
-    drawSvgGuideLine(widget, centerCol, 2, centerCol, 14, { opacity: 0.13, className: 'telemetry-green' });
-    drawSvgGuideLine(widget, 8, centerRow, 43, centerRow, { opacity: 0.13, className: 'telemetry-green' });
-    svgLabel(widget.labelLayer, '0', centerCol, 2, { className: 'telemetry-dim', anchor: 'middle' });
-    svgLabel(widget.labelLayer, '90', 44, centerRow, { className: 'telemetry-dim' });
-    svgLabel(widget.labelLayer, '180', centerCol, 14, { className: 'telemetry-dim', anchor: 'middle' });
-    svgLabel(widget.labelLayer, '270', 6, centerRow, { className: 'telemetry-dim' });
+    const staticKey = [
+        'radar-v2',
+        radarProfile.sweepTrail ?? 5,
+        radarProfile.clutterCount ?? 8,
+        radarProfile.contactLabels ? 'labels' : 'nolabels',
+        radarProfile.glow ? 'glow' : 'noglow'
+    ].join(':');
+    if (widget.svg.dataset.radarStaticKey !== staticKey) {
+        widget.svg.dataset.radarStaticKey = staticKey;
+        clearSvgLayer(widget.guideLayer);
+        clearSvgLayer(widget.glyphLayer);
+        clearSvgLayer(widget.labelLayer);
+        drawSvgGuideRect(widget, 0, 0, widget.cols, widget.rows, { opacity: 0.2, className: 'telemetry-cyan' });
+        for (let col = 8; col < widget.cols; col += 8) {
+            drawSvgGuideLine(widget, col, 1, col, widget.rows - 2, { className: 'telemetry-cyan', opacity: 0.045 });
+        }
+        for (let row = 4; row < widget.rows; row += 4) {
+            drawSvgGuideLine(widget, 1, row, widget.cols - 2, row, { className: 'telemetry-cyan', opacity: 0.045 });
+        }
+        [2, 3.5, 5, 6.5].forEach(radius => drawSvgGuideCircle(widget, centerCol, centerRow, radius, { opacity: 0.08 + phase.detail * 0.04, className: 'telemetry-green' }));
+        drawSvgGuideLine(widget, centerCol, 2, centerCol, 14, { opacity: 0.13, className: 'telemetry-green' });
+        drawSvgGuideLine(widget, 8, centerRow, 43, centerRow, { opacity: 0.13, className: 'telemetry-green' });
+        svgLabel(widget.labelLayer, '0', centerCol, 2, { className: 'telemetry-dim', anchor: 'middle' });
+        svgLabel(widget.labelLayer, '90', 44, centerRow, { className: 'telemetry-dim' });
+        svgLabel(widget.labelLayer, '180', centerCol, 14, { className: 'telemetry-dim', anchor: 'middle' });
+        svgLabel(widget.labelLayer, '270', 6, centerRow, { className: 'telemetry-dim' });
+        svgLabel(widget.labelLayer, 'CONTACTS', 48, 2, { className: 'telemetry-amber' });
+        svgLabel(widget.labelLayer, '', 48, 12, { className: 'telemetry-green' })?.setAttribute('data-radar-clutter-label', 'true');
+
+        const sweepGroup = svgElement('g', { 'data-radar-sweep': 'true' });
+        sweepGroup.dataset.cellWidth = String(widget.cellWidth);
+        sweepGroup.dataset.cellHeight = String(widget.cellHeight);
+        widget.glyphLayer.appendChild(sweepGroup);
+        const trailGlyphs = '·:+*#';
+        const sweepTrailCount = Math.max(1, Math.min(8, Number(radarProfile.sweepTrail || 5)));
+        for (let step = 1; step <= sweepTrailCount; step++) {
+            svgTextGlyph(sweepGroup, trailGlyphs[Math.min(trailGlyphs.length - 1, Math.floor(step / 3))], centerCol + Math.round(step * 1.55), centerRow, {
+                className: `telemetry-green ${radarProfile.glow === false ? 'telemetry-no-glow' : ''}`.trim(),
+                opacity: 0.28 + step * 0.04
+            })?.setAttribute('data-radar-sweep-glyph', String(step));
+        }
+
+        const clutterGroup = svgElement('g', { 'data-radar-clutter': 'true' });
+        clutterGroup.dataset.cellWidth = String(widget.cellWidth);
+        clutterGroup.dataset.cellHeight = String(widget.cellHeight);
+        widget.glyphLayer.appendChild(clutterGroup);
+        const clutterCount = Math.max(0, Math.min(20, Number(radarProfile.clutterCount || 0)));
+        for (let index = 0; index < clutterCount; index++) {
+            svgTextGlyph(clutterGroup, '·', centerCol, centerRow, { className: 'telemetry-dim', opacity: 0.22 })?.setAttribute('data-radar-clutter-dot', String(index));
+        }
+
+        const contactGroup = svgElement('g', { 'data-radar-contacts': 'true' });
+        contactGroup.dataset.cellWidth = String(widget.cellWidth);
+        contactGroup.dataset.cellHeight = String(widget.cellHeight);
+        widget.glyphLayer.appendChild(contactGroup);
+        for (let index = 0; index < 6; index++) {
+            svgTextGlyph(contactGroup, '·', centerCol, centerRow, { className: 'telemetry-dim', opacity: 0 })?.setAttribute('data-radar-contact', String(index));
+            svgLabel(widget.labelLayer, '', 48, 3 + index, { className: 'telemetry-dim' })?.setAttribute('data-radar-contact-label', String(index));
+        }
+    }
 
     const angle = prefersReducedMotion ? 1.35 : frame * 0.065;
-    const trailGlyphs = '·:+*#';
-    for (let step = 1; step <= Math.round(mixDiagnostic(4, 8, phase.detail)); step++) {
-        const col = centerCol + Math.round(Math.cos(angle) * step * 1.55);
-        const row = centerRow + Math.round(Math.sin(angle) * step * 0.72);
-        if (col > 4 && col < 45 && row > 1 && row < widget.rows - 2) {
-            svgTextGlyph(widget.glyphLayer, trailGlyphs[Math.min(trailGlyphs.length - 1, Math.floor(step / 3))], col, row, { className: 'telemetry-green', opacity: 0.28 + step * 0.04 });
-        }
+    const sweepGroup = widget.svg.querySelector('[data-radar-sweep="true"]');
+    if (sweepGroup) {
+        const centerPoint = widgetGridPixel(widget, centerCol, centerRow);
+        sweepGroup.setAttribute('transform', `rotate(${(angle * 180 / Math.PI).toFixed(2)} ${centerPoint.x} ${centerPoint.y})`);
+        sweepGroup.setAttribute('opacity', String(0.58 + phase.detail * 0.34));
     }
 
     const contacts = [
@@ -1366,22 +1470,55 @@ function renderTacticalRadarDashboardWidget(id, frame, phase) {
         { glyph: '□', angle: 2.72, radius: 6.1, cls: 'telemetry-green', range: '3.3km' },
         { glyph: '△', angle: 0.9, radius: 6.4, cls: 'telemetry-red', range: '5.8km' }
     ];
-    contacts.slice(0, Math.max(2, Math.round(mixDiagnostic(2, contacts.length, phase.detail)))).forEach((contact, index) => {
+    const visibleContacts = Math.max(2, Math.round(mixDiagnostic(2, contacts.length, phase.detail)));
+    const contactNodes = Array.from(widget.svg.querySelectorAll('[data-radar-contact]'));
+    const labelNodes = Array.from(widget.svg.querySelectorAll('[data-radar-contact-label]'));
+    contactNodes.forEach((node, index) => {
+        const contact = contacts[index];
+        if (!contact || index >= visibleContacts) {
+            node.setAttribute('opacity', '0');
+            if (labelNodes[index]) setSvgLabelElement(labelNodes[index], '');
+            return;
+        }
         const wobble = prefersReducedMotion ? 0 : Math.sin(frame * 0.045 + index) * 0.045;
         const col = centerCol + Math.round(Math.cos(contact.angle + wobble) * contact.radius * 1.55);
         const row = centerRow + Math.round(Math.sin(contact.angle + wobble) * contact.radius * 0.72);
         const contactPulse = contact.cls === 'telemetry-red' ? 0.68 + Math.sin(frame * 0.18 + index) * 0.18 : 0.82 + Math.sin(frame * 0.055 + index) * 0.1;
-        svgTextGlyph(widget.glyphLayer, contact.glyph, col, row, { className: contact.cls, opacity: clampDiagnostic(contactPulse, 0.48, 1) });
-        renderFixedGlyphLine(widget.glyphLayer, 3 + index, `${String(index + 1).padStart(2, '0')} ${contact.glyph} ${contact.range}`, {
-            col: 48,
-            width: 10,
-            className: contact.cls,
-            opacity: 0.92
-        });
+        setSvgTextElement(node, contact.glyph, col, row, { className: contact.cls, opacity: clampDiagnostic(contactPulse, 0.48, 1), cellWidth: widget.cellWidth, cellHeight: widget.cellHeight });
+        if (labelNodes[index]) {
+            setSvgLabelElement(labelNodes[index], radarProfile.contactLabels === false ? `${String(index + 1).padStart(2, '0')} ${contact.glyph}` : `${String(index + 1).padStart(2, '0')} ${contact.glyph} ${contact.range}`, {
+                className: contact.cls,
+                opacity: 0.92
+            });
+        }
     });
-    svgLabel(widget.labelLayer, 'CONTACTS', 48, 2, { className: 'telemetry-amber' });
-    svgLabel(widget.labelLayer, `CLUTTER ${Math.round(diagnosticLiveValue(28, 4, phase))}%`, 48, 12, { className: 'telemetry-green' });
-    drawDiagnosticPhaseScan(widget, phase, 'RADAR');
+    const clutterNodes = Array.from(widget.svg.querySelectorAll('[data-radar-clutter-dot]'));
+    if (!widget.svg.dataset.radarClutterFrame || Math.abs(frame - Number(widget.svg.dataset.radarClutterFrame)) >= 6 || phase.detail < 0.98) {
+        widget.svg.dataset.radarClutterFrame = String(frame);
+        clutterNodes.forEach((node, index) => {
+            const seed = index * 7 + frame;
+            const localAngle = ((seed * 37) % 360) * Math.PI / 180;
+            const localRadius = 1.4 + ((seed * 19) % 54) / 10;
+            const col = centerCol + Math.round(Math.cos(localAngle) * localRadius * 1.55);
+            const row = centerRow + Math.round(Math.sin(localAngle) * localRadius * 0.72);
+            setSvgTextElement(node, '·', col, row, {
+                className: 'telemetry-dim',
+                opacity: col > 6 && col < 44 && row > 2 && row < 14 ? 0.14 + ((index % 4) * 0.05) : 0,
+                cellWidth: widget.cellWidth,
+                cellHeight: widget.cellHeight
+            });
+        });
+    }
+    setSvgLabelElement(widget.svg.querySelector('[data-radar-clutter-label="true"]'), `CLUTTER ${Math.round(diagnosticLiveValue(28, 4, phase))}%`, { className: 'telemetry-green' });
+    let scanLayer = widget.svg.querySelector('[data-radar-scan="true"]');
+    if (!scanLayer) {
+        scanLayer = svgElement('g', { 'data-radar-scan': 'true' });
+        scanLayer.dataset.cellWidth = String(widget.cellWidth);
+        scanLayer.dataset.cellHeight = String(widget.cellHeight);
+        widget.glyphLayer.appendChild(scanLayer);
+    }
+    clearSvgLayer(scanLayer);
+    drawDiagnosticPhaseScan({ ...widget, guideLayer: scanLayer, glyphLayer: scanLayer }, phase, 'RADAR');
 }
 
 function renderSpectrumDashboardWidget(id, frame, networkValue, phase) {
@@ -2086,7 +2223,7 @@ function runSideTelemetryLoop(timestamp = 0) {
         return;
     }
 
-    const interval = effectsFrameMs(80, 140, 180);
+    const interval = diagnosticRenderProfile().sideTelemetryMs || effectsFrameMs(80, 140, 180);
     if (!sideTelemetryLastRender || timestamp - sideTelemetryLastRender >= interval) {
         sideTelemetryLastRender = timestamp;
         sideTelemetryFrame++;
@@ -2224,10 +2361,11 @@ function renderSideGlyphTelemetry(frame = 0) {
     renderSideFacilityPreview(frame);
 }
 
-function renderDiagnosticDashboard() {
+function renderDiagnosticDashboard(timestamp = performance.now(), options = {}) {
     const frame = diagnosticFrame;
     const phaseInfo = getDiagnosticPhase(frame);
     const phase = prefersReducedMotion ? 48 : frame;
+    const forceWidgets = Boolean(options.force);
     const meta = phaseInfo.mode === 'boot'
         ? `SCAN BUS: READING SENSORS ${asciiBar(phaseInfo.sensorProgress, 12)}`
         : phaseInfo.mode === 'transition'
@@ -2249,49 +2387,49 @@ function renderDiagnosticDashboard() {
     const networkStatus = statusGet('diagnostic.network.status', 'DISCONNECTED').toUpperCase();
     diagCardState('diagNetworkCard', phaseInfo.mode === 'live' ? statusState('diagnostic.network.state', 'warn') : 'ok');
     diagText('diagNetworkStatus', diagnosticStatusText(networkStatus === 'DISCONNECTED' ? 'NOISE' : networkStatus, phaseInfo, 'SCAN', 'SYNC'));
-    renderSpectrumDashboardWidget('diagNetwork', phase, network, phaseInfo);
+    renderDiagnosticWidget('network', timestamp, () => renderSpectrumDashboardWidget('diagNetwork', phase, network, phaseInfo), { force: forceWidgets });
 
     const securityStatus = statusGet('diagnostic.alarm.status', 'DIS DEGRADED').toUpperCase();
     diagCardState('diagSecurityCard', phaseInfo.mode === 'live' ? statusState('diagnostic.alarm.state', 'warn') : 'ok');
     diagText('diagSecurityStatus', diagnosticStatusText(securityStatus === 'DIS DEGRADED' ? 'ELEVATED' : securityStatus, phaseInfo, 'SOLVE', 'MESH'));
-    renderTomographyDashboardWidget('diagSecurity', phase, phaseInfo);
+    renderDiagnosticWidget('security', timestamp, () => renderTomographyDashboardWidget('diagSecurity', phase, phaseInfo), { force: forceWidgets });
 
     const outpostStatus = statusGet('diagnostic.outposts.status', 'LINK DEGRADED').toUpperCase();
     diagCardState('diagOutpostCard', phaseInfo.mode === 'live' ? statusState('diagnostic.outposts.state', 'warn') : 'ok');
     diagText('diagOutpostStatus', diagnosticStatusText(outpostStatus, phaseInfo, 'PING', 'SWEEP'));
-    renderTacticalRadarDashboardWidget('diagOutpost', phase, phaseInfo);
+    renderDiagnosticWidget('outpost', timestamp, () => renderTacticalRadarDashboardWidget('diagOutpost', phase, phaseInfo), { force: forceWidgets, interval: diagnosticRenderProfile().radar?.frameMs });
 
     const generatorStatus = statusGet('diagnostic.generator.status', 'SERVICE DUE').toUpperCase();
     diagCardState('diagGeneratorCard', phaseInfo.mode === 'live' ? statusState('diagnostic.generator.state', 'warn') : 'ok');
     diagText('diagGeneratorStatus', diagnosticStatusText(generatorStatus, phaseInfo, 'CAL', 'LOCK'));
-    renderGateScopeDashboardWidget('diagGenerator', phase, generator, phaseInfo);
+    renderDiagnosticWidget('generator', timestamp, () => renderGateScopeDashboardWidget('diagGenerator', phase, generator, phaseInfo), { force: forceWidgets });
 
     const powerStatus = statusGet('diagnostic.power.status', 'LOW RESERVE').toUpperCase();
     diagCardState('diagPowerCard', phaseInfo.mode === 'live' ? statusState('diagnostic.power.state', 'warn') : 'ok');
     diagText('diagPowerStatus', diagnosticStatusText(powerStatus, phaseInfo, 'BUS', 'LOAD'));
-    renderReactorSyncDashboardWidget('diagPower', phase, { output: reactorOutput, sync: syncIntegrity, mainPower, reservePower }, phaseInfo);
+    renderDiagnosticWidget('power', timestamp, () => renderReactorSyncDashboardWidget('diagPower', phase, { output: reactorOutput, sync: syncIntegrity, mainPower, reservePower }, phaseInfo), { force: forceWidgets });
 
     const alarmStatus = statusGet('diagnostic.security.status', 'MESH').toUpperCase();
     diagCardState('diagAlarmCard', phaseInfo.mode === 'live' ? statusState('diagnostic.security.state', 'warn') : 'ok');
     diagText('diagAlarmStatus', diagnosticStatusText(alarmStatus === 'ARMED' ? 'MESH' : alarmStatus, phaseInfo, 'MAP', 'MESH'));
-    renderBlackDesertMapDashboardWidget('diagAlarm', phase, phaseInfo);
+    renderDiagnosticWidget('alarm', timestamp, () => renderBlackDesertMapDashboardWidget('diagAlarm', phase, phaseInfo), { force: forceWidgets });
 
     const lifeStatus = statusGet('diagnostic.life.status', `${unknownLife} UNKNOWN`).toUpperCase();
     diagCardState('diagLifeCard', phaseInfo.mode === 'live' ? statusState('diagnostic.life.state', 'alert') : 'ok');
     diagText('diagLifeStatus', diagnosticStatusText(lifeStatus, phaseInfo, 'BIO', 'SYNC'));
-    renderBioscanArrayDashboardWidget('diagLife', phase, { lifeCount, unstableLife, unknownLife }, phaseInfo);
+    renderDiagnosticWidget('life', timestamp, () => renderBioscanArrayDashboardWidget('diagLife', phase, { lifeCount, unstableLife, unknownLife }, phaseInfo), { force: forceWidgets });
 
     diagCardState('diagEventsCard', phaseInfo.mode === 'live' ? statusState('diagnostic.alarm.state', 'warn') : 'ok');
     diagText('diagEventsStatus', diagnosticStatusText('FEED', phaseInfo, 'BOOT', 'TAIL'));
-    renderLiveEventDashboardWidget('diagEvents', phase, { lifeCount, unstableLife, unknownLife }, phaseInfo);
+    renderDiagnosticWidget('events', timestamp, () => renderLiveEventDashboardWidget('diagEvents', phase, { lifeCount, unstableLife, unknownLife }, phaseInfo), { force: forceWidgets });
 
     diagCardState('diagIntegrityCard', signalIntegrity < 72 ? 'alert' : signalIntegrity < 86 ? 'warn' : 'ok');
     diagText('diagIntegrityStatus', diagnosticStatusText(`${signalIntegrity.toFixed(1)}%`, phaseInfo, 'LOCK', 'CAL'));
-    renderSignalIntegrityDashboardWidget('diagIntegrity', phase, signalIntegrity, phaseInfo);
+    renderDiagnosticWidget('integrity', timestamp, () => renderSignalIntegrityDashboardWidget('diagIntegrity', phase, signalIntegrity, phaseInfo), { force: forceWidgets });
 
     diagCardState('diagUplinkCard', phaseInfo.mode === 'live' ? statusState('diagnostic.network.state', 'warn') : 'ok');
     diagText('diagUplinkStatus', diagnosticStatusText(syncIntegrity > 88 ? 'LOCKED' : 'DRIFT', phaseInfo, 'PROC', 'SYNC'));
-    renderUplinkDashboardWidget('diagUplink', phase, { sync: syncIntegrity }, phaseInfo);
+    renderDiagnosticWidget('uplink', timestamp, () => renderUplinkDashboardWidget('diagUplink', phase, { sync: syncIntegrity }, phaseInfo), { force: forceWidgets });
 
     const defaultTicker = `FACILITY PASS: EXTERNAL COMMS DOWN // DEFENSE ARMED // DIS SENSORS DEGRADED // UNKNOWN LIFE SIGNS ${spinner(phase)} ${asciiSweep(phase, 20)}`;
     const phaseTicker = phaseInfo.mode === 'boot'
@@ -2305,11 +2443,11 @@ function renderDiagnosticDashboard() {
 
 function runDiagnosticLoop(timestamp = 0) {
     if (!diagnosticActive || !AppState.networkOnline) return;
-    const interval = effectsFrameMs(80, 140, 180);
+    const interval = diagnosticRenderProfile().schedulerMs || effectsFrameMs(80, 140, 180);
     if (!diagnosticLastRender || timestamp - diagnosticLastRender >= interval) {
         diagnosticLastRender = timestamp;
         diagnosticFrame++;
-        renderDiagnosticDashboard();
+        renderDiagnosticDashboard(timestamp);
         if (diagnosticFrame < 32 && diagnosticFrame % 5 === 0) AudioEngine.keyClick();
     }
     diagnosticAnimFrame = requestAnimationFrame(runDiagnosticLoop);
@@ -2326,9 +2464,10 @@ function showDiagnosticDashboard() {
     setAppState({ activeOverlay: 'diagnostic' }, { resetSelection: false });
     diagnosticFrame = prefersReducedMotion ? 48 : 0;
     diagnosticLastRender = 0;
+    resetDiagnosticWidgetRegistry();
     overlay.classList.add('active');
     overlay.setAttribute('aria-hidden', 'false');
-    renderDiagnosticDashboard();
+    renderDiagnosticDashboard(performance.now(), { force: true });
     AudioEngine.bootBeep();
     Animator.dialogOpen(overlay);
     if (!prefersReducedMotion) {
@@ -2345,6 +2484,7 @@ function closeDiagnosticDashboard() {
         cancelAnimationFrame(diagnosticAnimFrame);
         diagnosticAnimFrame = null;
     }
+    resetDiagnosticWidgetRegistry();
     AudioEngine.pageFlip();
     Animator.dialogClose(overlay, () => {
         overlay.classList.remove('active');
@@ -2640,7 +2780,7 @@ function renderFacilityStatus(timestamp = 0) {
 
 function runFacilityLoop(timestamp = 0) {
     if (!facilityActive || !AppState.networkOnline) return;
-    const interval = effectsFrameMs(34, 80, 140);
+    const interval = diagnosticRenderProfile().facilityMs || effectsFrameMs(34, 80, 140);
     if (!facilityLastRender || timestamp - facilityLastRender >= interval) {
         facilityLastRender = timestamp;
         facilityFrame++;
@@ -2685,6 +2825,50 @@ function closeFacilityStatus() {
         overlay.classList.remove('active');
         overlay.setAttribute('aria-hidden', 'true');
     });
+}
+
+function getDiagnosticPerformanceSnapshot() {
+    const profile = diagnosticRenderProfile();
+    const widgetIds = [
+        ['network', 'diagNetwork'],
+        ['security', 'diagSecurity'],
+        ['outpost', 'diagOutpost'],
+        ['generator', 'diagGenerator'],
+        ['power', 'diagPower'],
+        ['alarm', 'diagAlarm'],
+        ['life', 'diagLife'],
+        ['events', 'diagEvents'],
+        ['integrity', 'diagIntegrity'],
+        ['uplink', 'diagUplink']
+    ];
+    return {
+        browser: typeof detectBrowserProfile === 'function' ? detectBrowserProfile() : 'unknown',
+        profile: profile.name || 'unknown',
+        effectsMode,
+        effectiveEffects: EffectsController.effectiveLabel(),
+        reducedMotion: prefersReducedMotion,
+        safeMode: typeof safeModeActive === 'function' ? safeModeActive() : false,
+        activeOverlay: AppState.activeOverlay,
+        documentHidden: document.hidden,
+        diagnosticLoop: Boolean(diagnosticAnimFrame),
+        facilityLoop: Boolean(facilityAnimFrame),
+        sideLoop: Boolean(sideTelemetryAnimFrame),
+        schedulerMs: profile.schedulerMs,
+        facilityMs: profile.facilityMs,
+        sideTelemetryMs: profile.sideTelemetryMs,
+        radarMs: profile.radar?.frameMs,
+        widgets: widgetIds.map(([key, id]) => {
+            const host = getById(id);
+            const runtime = DIAGNOSTIC_WIDGET_REGISTRY.get(key);
+            return {
+                key,
+                id,
+                nodes: host ? host.querySelectorAll('svg *').length : 0,
+                targetMs: diagnosticWidgetInterval(key, 160),
+                renders: runtime?.renders || 0
+            };
+        })
+    };
 }
 
 // ========================================

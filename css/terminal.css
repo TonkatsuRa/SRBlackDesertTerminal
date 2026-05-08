@@ -808,6 +808,31 @@ body.terminal-typing .terminal-typewriter-active::after {
     text-shadow: 0 0 4px currentColor;
 }
 
+.telemetry-no-glow,
+.browser-firefox .telemetry-trace,
+.browser-firefox .telemetry-glyph,
+.render-low .telemetry-trace,
+.render-low .telemetry-glyph,
+.render-reduced .telemetry-trace,
+.render-reduced .telemetry-glyph,
+.safe-mode .telemetry-trace,
+.safe-mode .telemetry-glyph {
+    filter: none;
+    text-shadow: none;
+}
+
+.browser-firefox .telemetry-map-label-strong,
+.render-low .telemetry-map-label-strong,
+.render-reduced .telemetry-map-label-strong,
+.safe-mode .telemetry-map-label-strong {
+    text-shadow: none;
+}
+
+.safe-mode-indicator {
+    color: var(--amber);
+    border-color: rgba(255, 173, 0, 0.42);
+}
+
 .telemetry-cyan { color: var(--cyan); }
 .telemetry-green { color: var(--phosphor); }
 .telemetry-amber { color: var(--amber); }

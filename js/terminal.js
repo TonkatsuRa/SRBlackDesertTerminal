@@ -885,6 +885,56 @@ function printEffectsMode() {
     print(`VISUAL EFFECTS MODE: ${EffectsController.effectiveLabel()}`, EffectsController.isLow() ? 't-amber' : 't-cyan');
     print('FX AUTO / FX FULL / FX LOW adjusts decorative terminal effects.', 't-dim');
     print('PERFORMANCE ON selects LOW. PERFORMANCE OFF returns to AUTO.', 't-dim');
+    print('PERFORMANCE STATUS prints the active render profile and SVG node counts.', 't-dim');
+    print('');
+}
+
+function printPerformanceStatus() {
+    const snapshot = typeof getDiagnosticPerformanceSnapshot === 'function'
+        ? getDiagnosticPerformanceSnapshot()
+        : null;
+    const profile = typeof getEffectiveRenderProfile === 'function'
+        ? getEffectiveRenderProfile()
+        : null;
+    print('');
+    print('PERFORMANCE STATUS', 't-bright');
+    print(`Browser profile : ${snapshot?.browser || (typeof detectBrowserProfile === 'function' ? detectBrowserProfile() : 'unknown')}`, 't-dim');
+    print(`Effects mode    : ${snapshot?.effectiveEffects || EffectsController.effectiveLabel()}`, EffectsController.isLow() ? 't-amber' : 't-cyan');
+    print(`Render profile  : ${snapshot?.profile || profile?.name || 'unknown'}`, 't-cyan');
+    print(`Reduced motion  : ${prefersReducedMotion ? 'YES' : 'NO'}`, prefersReducedMotion ? 't-amber' : 't-dim');
+    print(`Safe mode       : ${typeof safeModeActive === 'function' && safeModeActive() ? 'ON' : 'OFF'}`, typeof safeModeActive === 'function' && safeModeActive() ? 't-amber' : 't-dim');
+    print(`Active overlay  : ${AppState.activeOverlay.toUpperCase()}`, 't-dim');
+    print(`Document hidden : ${document.hidden ? 'YES' : 'NO'}`, document.hidden ? 't-amber' : 't-dim');
+    if (snapshot) {
+        print(`Loops           : DIAG ${snapshot.diagnosticLoop ? 'RUN' : 'STOP'} // FAC ${snapshot.facilityLoop ? 'RUN' : 'STOP'} // SIDE ${snapshot.sideLoop ? 'RUN' : 'STOP'}`, 't-dim');
+        print(`Intervals       : MAIN ${snapshot.schedulerMs}ms // RADAR ${snapshot.radarMs}ms // FAC ${snapshot.facilityMs}ms // SIDE ${snapshot.sideTelemetryMs}ms`, 't-dim');
+        print('SVG NODE COUNTS :', 't-amber');
+        snapshot.widgets.forEach(widget => {
+            print(`  ${widget.key.padEnd(9, ' ')} ${String(widget.nodes).padStart(4, ' ')} nodes // ${String(widget.targetMs).padStart(4, ' ')}ms // renders ${widget.renders}`, widget.nodes > 900 ? 't-amber' : 't-dim');
+        });
+    }
+    print('');
+}
+
+function handleSafeModeCommand(args) {
+    const setting = args.toLowerCase();
+    if (!setting || setting === 'mode' || ['on', 'enable', 'enabled', '1', 'true'].includes(setting)) {
+        setSafeMode(true, { announce: true });
+        return;
+    }
+    if (['off', 'disable', 'disabled', '0', 'false'].includes(setting)) {
+        setSafeMode(false, { announce: true });
+        return;
+    }
+    if (['status', 'state'].includes(setting)) {
+        print('');
+        print(`SAFE MODE: ${safeModeActive() ? 'ON' : 'OFF'}`, safeModeActive() ? 't-amber' : 't-cyan');
+        print('Usage: SAFE MODE | SAFE MODE OFF | SAFE STATUS', 't-dim');
+        print('');
+        return;
+    }
+    print('');
+    print('Usage: SAFE MODE | SAFE MODE OFF | SAFE STATUS', 't-amber');
     print('');
 }
 
@@ -977,6 +1027,11 @@ function handleEffectsCommand(command, args) {
     const setting = args.toLowerCase();
     if (!setting) {
         printEffectsMode();
+        return;
+    }
+
+    if (['status', 'debug', 'profile'].includes(setting)) {
+        printPerformanceStatus();
         return;
     }
 
@@ -1379,9 +1434,16 @@ function registerTerminalCommands() {
     registerCommand({
         name: 'performance',
         aliases: ['perf'],
-        usage: 'PERFORMANCE ON | PERFORMANCE OFF',
+        usage: 'PERFORMANCE ON | PERFORMANCE OFF | PERFORMANCE STATUS',
         description: 'Toggle reduced decorative effects for smoother browsers.',
         run: ctx => handleEffectsCommand('performance', ctx.args)
+    });
+    registerCommand({
+        name: 'safe mode',
+        aliases: ['safe'],
+        usage: 'SAFE MODE | SAFE MODE OFF',
+        description: 'Force a session-only low-effects stability profile.',
+        run: ctx => handleSafeModeCommand(ctx.args)
     });
     registerCommand({ name: 'kontol', hidden: true, run: () => startMiniGame() });
     registerCommand({ name: 'derfette', hidden: true, run: () => startCasinoGame() });

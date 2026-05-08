@@ -22,6 +22,7 @@ const CDN_SCRIPTS = {
 };
 const lazyScriptPromises = new Map();
 let effectsMode = 'auto';
+let safeModeSession = false;
 
 function normalizeEffectsMode(mode) {
     const value = String(mode || '').trim().toLowerCase();
@@ -29,13 +30,135 @@ function normalizeEffectsMode(mode) {
 }
 
 function effectsLowActive() {
-    return prefersReducedMotion || effectsMode === 'low' || (effectsMode === 'auto' && lowPowerQuery.matches);
+    return safeModeSession || prefersReducedMotion || effectsMode === 'low' || (effectsMode === 'auto' && lowPowerQuery.matches);
+}
+
+// Render profiles keep expensive telemetry effects predictable per browser.
+// Adjust intervals/counts here when tuning diagnostics performance.
+const RENDER_PROFILES = {
+    chromium: {
+        name: 'chromium',
+        schedulerMs: 50,
+        sideTelemetryMs: 120,
+        facilityMs: 90,
+        widgetMs: {
+            network: 160,
+            security: 120,
+            outpost: 66,
+            generator: 80,
+            power: 120,
+            alarm: 60000,
+            life: 80,
+            events: 160,
+            integrity: 140,
+            uplink: 120
+        },
+        radar: { frameMs: 66, sweepTrail: 8, clutterCount: 14, contactLabels: true, glow: true, pulse: true }
+    },
+    firefox: {
+        name: 'firefox',
+        schedulerMs: 80,
+        sideTelemetryMs: 180,
+        facilityMs: 140,
+        widgetMs: {
+            network: 240,
+            security: 200,
+            outpost: 100,
+            generator: 120,
+            power: 160,
+            alarm: 60000,
+            life: 120,
+            events: 240,
+            integrity: 180,
+            uplink: 180
+        },
+        radar: { frameMs: 100, sweepTrail: 5, clutterCount: 8, contactLabels: true, glow: false, pulse: true }
+    },
+    safari: {
+        name: 'safari',
+        schedulerMs: 80,
+        sideTelemetryMs: 180,
+        facilityMs: 140,
+        widgetMs: {
+            network: 240,
+            security: 180,
+            outpost: 100,
+            generator: 120,
+            power: 160,
+            alarm: 60000,
+            life: 120,
+            events: 240,
+            integrity: 180,
+            uplink: 180
+        },
+        radar: { frameMs: 100, sweepTrail: 5, clutterCount: 8, contactLabels: true, glow: false, pulse: true }
+    },
+    low: {
+        name: 'effects-low',
+        schedulerMs: 140,
+        sideTelemetryMs: 260,
+        facilityMs: 220,
+        widgetMs: {
+            network: 260,
+            security: 240,
+            outpost: 180,
+            generator: 220,
+            power: 220,
+            alarm: 60000,
+            life: 220,
+            events: 260,
+            integrity: 240,
+            uplink: 240
+        },
+        radar: { frameMs: 180, sweepTrail: 3, clutterCount: 5, contactLabels: false, glow: false, pulse: false }
+    },
+    reduced: {
+        name: 'reduced-motion',
+        schedulerMs: 60000,
+        sideTelemetryMs: 60000,
+        facilityMs: 60000,
+        widgetMs: {
+            network: 60000,
+            security: 60000,
+            outpost: 60000,
+            generator: 60000,
+            power: 60000,
+            alarm: 60000,
+            life: 60000,
+            events: 60000,
+            integrity: 60000,
+            uplink: 60000
+        },
+        radar: { frameMs: 60000, sweepTrail: 1, clutterCount: 0, contactLabels: true, glow: false, pulse: false }
+    }
+};
+
+function detectBrowserProfile() {
+    const ua = navigator.userAgent || '';
+    const vendor = navigator.vendor || '';
+    if (/Firefox\//i.test(ua)) return 'firefox';
+    if (/Safari\//i.test(ua) && /Apple/i.test(vendor) && !/Chrome|Chromium|CriOS|Edg\//i.test(ua)) return 'safari';
+    if (/Chrome|Chromium|Edg\//i.test(ua)) return 'chromium';
+    return 'chromium';
+}
+
+function getEffectiveRenderProfile() {
+    if (prefersReducedMotion) return RENDER_PROFILES.reduced;
+    if (safeModeSession || effectsLowActive()) return RENDER_PROFILES.low;
+    return RENDER_PROFILES[detectBrowserProfile()] || RENDER_PROFILES.chromium;
+}
+
+function getRenderWidgetInterval(widgetId, fallbackMs = 140) {
+    const profile = getEffectiveRenderProfile();
+    return profile.widgetMs?.[widgetId] ?? fallbackMs;
 }
 
 function effectsFrameMs(fullMs = 33, lowMs = 80, typingMs = 140) {
-    if (prefersReducedMotion) return 250;
+    const profile = getEffectiveRenderProfile();
+    if (prefersReducedMotion) return profile.schedulerMs || 60000;
     if (document.hidden) return 600;
-    return effectsLowActive() ? lowMs : fullMs;
+    if (safeModeSession || effectsLowActive()) return Math.max(lowMs, profile.schedulerMs || lowMs);
+    return Math.max(fullMs, profile.schedulerMs || fullMs);
 }
 
 const EffectsController = {
@@ -63,6 +186,7 @@ const EffectsController = {
     },
 
     effectiveLabel() {
+        if (safeModeSession) return 'SAFE';
         if (prefersReducedMotion) return 'REDUCED';
         if (effectsMode === 'auto') return effectsLowActive() ? 'AUTO-LOW' : 'AUTO';
         return effectsMode.toUpperCase();
@@ -78,17 +202,70 @@ const EffectsController = {
             root.classList.toggle('effects-auto', effectsMode === 'auto');
             root.classList.toggle('effects-full', effectsMode === 'full' && !prefersReducedMotion);
             root.classList.toggle('effects-low', this.isLow());
+            applyRenderProfileClasses(root);
         }
         if (document.body) {
             document.body.classList.toggle('effects-auto', effectsMode === 'auto');
             document.body.classList.toggle('effects-full', effectsMode === 'full' && !prefersReducedMotion);
             document.body.classList.toggle('effects-low', this.isLow());
+            applyRenderProfileClasses(document.body);
         }
         syncLowPowerMode();
         updateEffectsStatus();
         if (facilityActive) renderFacilityStatus(performance.now());
     }
 };
+
+function applyRenderProfileClasses(target) {
+    if (!target) return;
+    const browser = detectBrowserProfile();
+    const profile = getEffectiveRenderProfile();
+    target.classList.toggle('browser-firefox', browser === 'firefox');
+    target.classList.toggle('browser-safari', browser === 'safari');
+    target.classList.toggle('browser-chromium', browser === 'chromium');
+    target.classList.toggle('render-low', profile.name === 'effects-low');
+    target.classList.toggle('render-reduced', profile.name === 'reduced-motion');
+    target.classList.toggle('safe-mode', safeModeSession);
+    target.dataset.renderProfile = profile.name;
+    target.dataset.browserProfile = browser;
+}
+
+function initializeSafeModeFromUrl() {
+    let requested = false;
+    try {
+        requested = new URLSearchParams(window.location.search).get('safe') === '1';
+    } catch (error) {
+        requested = false;
+    }
+    if (requested) setSafeMode(true, { announce: false });
+    return safeModeSession;
+}
+
+function setSafeMode(enabled, options = {}) {
+    safeModeSession = Boolean(enabled);
+    if (typeof AppState !== 'undefined') AppState.safeMode = safeModeSession;
+    EffectsController.apply();
+    if (typeof resetDiagnosticWidgetRegistry === 'function') resetDiagnosticWidgetRegistry();
+    if (typeof diagnosticActive !== 'undefined' && diagnosticActive && typeof renderDiagnosticDashboard === 'function') {
+        renderDiagnosticDashboard(performance.now(), { force: true });
+    }
+    if (typeof renderSideGlyphTelemetry === 'function') {
+        renderSideGlyphTelemetry(typeof diagnosticFrame === 'number' ? diagnosticFrame : 0);
+    }
+    if (options.announce !== false && typeof print === 'function') {
+        print('');
+        print(safeModeSession ? 'SAFE MODE ENABLED' : 'SAFE MODE DISABLED', safeModeSession ? 't-amber' : 't-cyan');
+        print(safeModeSession
+            ? 'Heavy telemetry effects reduced for stability. Core terminal systems remain online.'
+            : 'Saved visual effects preference restored.', 't-dim');
+        print('');
+    }
+    return safeModeSession;
+}
+
+function safeModeActive() {
+    return safeModeSession;
+}
 
 function syncLowPowerMode() {
     if (!document.body) return;
@@ -212,12 +389,30 @@ function updateEffectsStatus() {
     const display = EffectsController.effectiveLabel();
     if (label) label.textContent = display;
     if (dot) {
-        dot.classList.toggle('warn', effectsMode === 'auto' && EffectsController.isLow());
-        dot.classList.toggle('err', EffectsController.isLow() && effectsMode !== 'auto');
+        dot.classList.toggle('warn', safeModeSession || (effectsMode === 'auto' && EffectsController.isLow()));
+        dot.classList.toggle('err', EffectsController.isLow() && effectsMode !== 'auto' && !safeModeSession);
     }
     if (toggle) {
         toggle.setAttribute('aria-label', `Visual effects mode ${display}. Activate to cycle mode.`);
         toggle.title = `Effects mode: ${display}`;
+    }
+    updateSafeModeIndicator();
+}
+
+function updateSafeModeIndicator() {
+    const statusBar = document.querySelector('.status-bar');
+    if (!statusBar) return;
+    let indicator = getById('safeModeIndicator');
+    if (!safeModeSession) {
+        if (indicator) indicator.remove();
+        return;
+    }
+    if (!indicator) {
+        indicator = document.createElement('div');
+        indicator.id = 'safeModeIndicator';
+        indicator.className = 'status-item safe-mode-indicator';
+        indicator.innerHTML = '<div class="status-dot warn"></div> SAFE <span>MODE</span>';
+        statusBar.appendChild(indicator);
     }
 }
 
@@ -317,7 +512,8 @@ const AppState = {
     soundEnabled: true,
     networkOnline: true,
     databaseLoaded: false,
-    activeOverlay: 'none'
+    activeOverlay: 'none',
+    safeMode: safeModeSession
 };
 let accessLevel = ACCESS_LEVELS.employee;
 let adminMode = false;
@@ -533,6 +729,10 @@ function setAppState(patch = {}, options = {}) {
     if (Object.prototype.hasOwnProperty.call(patch, 'activeOverlay')) {
         AppState.activeOverlay = normalizeOverlayName(patch.activeOverlay);
     }
+    if (Object.prototype.hasOwnProperty.call(patch, 'safeMode')) {
+        safeModeSession = Boolean(patch.safeMode);
+        AppState.safeMode = safeModeSession;
+    }
 
     syncAppUi(options);
     return AppState;
@@ -607,9 +807,11 @@ function syncAppUi(options = {}) {
         document.body.classList.toggle('admin-access-active', adminMode);
         document.body.classList.toggle('elevated-access-active', AppState.accessLevel === ACCESS_LEVELS.elevated);
         document.body.classList.toggle('network-offline', !AppState.networkOnline);
+        document.body.classList.toggle('safe-mode', safeModeSession);
         document.body.dataset.accessLevel = AppState.accessLevel;
         document.body.dataset.activeOverlay = AppState.activeOverlay;
     }
+    updateSafeModeIndicator();
 }
 
 function syncAppStateFromLegacy(options = {}) {

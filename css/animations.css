@@ -634,3 +634,18 @@ html.has-gsap .boot-output {
 #fileInput,
 #statusFileInput { display: none; }
 
+.render-low .status-dot,
+.render-reduced .status-dot,
+.safe-mode .status-dot,
+.render-low .ares-wordmark-svg,
+.render-reduced .ares-wordmark-svg,
+.safe-mode .ares-wordmark-svg {
+    animation-duration: 3s;
+}
+
+.render-reduced *,
+.safe-mode .crt-overlay::before,
+.safe-mode .crt-overlay::after {
+    animation-play-state: paused;
+}
+

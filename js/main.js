@@ -2,6 +2,7 @@
 // INITIALIZATION
 // ========================================
 document.addEventListener('DOMContentLoaded', () => {
+    initializeSafeModeFromUrl();
     EffectsController.load();
     applyMotionPreference();
     bindPreferenceListeners();
