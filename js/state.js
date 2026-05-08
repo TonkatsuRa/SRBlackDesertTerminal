@@ -34,13 +34,13 @@ function effectsLowActive() {
 }
 
 // Render profiles keep expensive telemetry effects predictable per browser.
-// Adjust intervals/counts here when tuning diagnostics performance.
+// Non-coders can safely tune intervals/counts here without editing widget code.
 const RENDER_PROFILES = {
     chromium: {
         name: 'chromium',
         schedulerMs: 50,
         sideTelemetryMs: 120,
-        facilityMs: 90,
+        facilityMs: 150,
         widgetMs: {
             network: 160,
             security: 120,
@@ -53,13 +53,14 @@ const RENDER_PROFILES = {
             integrity: 140,
             uplink: 120
         },
-        radar: { frameMs: 66, sweepTrail: 8, clutterCount: 14, contactLabels: true, glow: true, pulse: true }
+        radar: { frameMs: 66, sweepTrail: 8, clutterCount: 14, contactLabels: true, glow: true, pulse: true },
+        facility: { backgroundRefreshFrames: 90, packetCount: 6, contactCount: 2, readoutEvery: 5, motion: true, pulse: false }
     },
     firefox: {
         name: 'firefox',
         schedulerMs: 80,
-        sideTelemetryMs: 180,
-        facilityMs: 140,
+        sideTelemetryMs: 220,
+        facilityMs: 220,
         widgetMs: {
             network: 240,
             security: 200,
@@ -72,13 +73,14 @@ const RENDER_PROFILES = {
             integrity: 180,
             uplink: 180
         },
-        radar: { frameMs: 100, sweepTrail: 5, clutterCount: 8, contactLabels: true, glow: false, pulse: true }
+        radar: { frameMs: 110, sweepTrail: 4, clutterCount: 6, contactLabels: true, glow: false, pulse: false },
+        facility: { backgroundRefreshFrames: 180, packetCount: 3, contactCount: 1, readoutEvery: 8, motion: false, pulse: false }
     },
     safari: {
         name: 'safari',
         schedulerMs: 80,
-        sideTelemetryMs: 180,
-        facilityMs: 140,
+        sideTelemetryMs: 220,
+        facilityMs: 220,
         widgetMs: {
             network: 240,
             security: 180,
@@ -91,13 +93,14 @@ const RENDER_PROFILES = {
             integrity: 180,
             uplink: 180
         },
-        radar: { frameMs: 100, sweepTrail: 5, clutterCount: 8, contactLabels: true, glow: false, pulse: true }
+        radar: { frameMs: 110, sweepTrail: 4, clutterCount: 6, contactLabels: true, glow: false, pulse: false },
+        facility: { backgroundRefreshFrames: 180, packetCount: 3, contactCount: 1, readoutEvery: 8, motion: false, pulse: false }
     },
     low: {
         name: 'effects-low',
         schedulerMs: 140,
-        sideTelemetryMs: 260,
-        facilityMs: 220,
+        sideTelemetryMs: 320,
+        facilityMs: 360,
         widgetMs: {
             network: 260,
             security: 240,
@@ -110,7 +113,8 @@ const RENDER_PROFILES = {
             integrity: 240,
             uplink: 240
         },
-        radar: { frameMs: 180, sweepTrail: 3, clutterCount: 5, contactLabels: false, glow: false, pulse: false }
+        radar: { frameMs: 220, sweepTrail: 2, clutterCount: 3, contactLabels: false, glow: false, pulse: false },
+        facility: { backgroundRefreshFrames: 240, packetCount: 2, contactCount: 1, readoutEvery: 10, motion: false, pulse: false }
     },
     reduced: {
         name: 'reduced-motion',
@@ -129,7 +133,8 @@ const RENDER_PROFILES = {
             integrity: 60000,
             uplink: 60000
         },
-        radar: { frameMs: 60000, sweepTrail: 1, clutterCount: 0, contactLabels: true, glow: false, pulse: false }
+        radar: { frameMs: 60000, sweepTrail: 1, clutterCount: 0, contactLabels: true, glow: false, pulse: false },
+        facility: { backgroundRefreshFrames: 60000, packetCount: 0, contactCount: 0, readoutEvery: 60000, motion: false, pulse: false }
     }
 };
 

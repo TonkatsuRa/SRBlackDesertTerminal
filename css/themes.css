@@ -1392,3 +1392,80 @@ body.network-offline .side-ascii {
         animation: none !important;
     }
 }
+
+/* Stabilization overrides: keep the terminal style, but make expensive glow
+   and SVG filter effects cheaper in Firefox, low effects, reduced motion, and safe mode. */
+.browser-firefox .telemetry-trace,
+.browser-firefox .ares-wordmark-svg,
+.render-low .telemetry-trace,
+.render-low .ares-wordmark-svg,
+.render-reduced .telemetry-trace,
+.render-reduced .ares-wordmark-svg,
+.safe-mode .telemetry-trace,
+.safe-mode .ares-wordmark-svg {
+    filter: none;
+}
+
+.browser-firefox .ares-wordmark-scan,
+.render-low .ares-wordmark-scan,
+.render-reduced .ares-wordmark-scan,
+.safe-mode .ares-wordmark-scan,
+.render-low .ares-wordmark-svg .ares-emblem-core,
+.render-low .ares-wordmark-svg .ares-wordmark-main,
+.render-reduced .ares-wordmark-svg .ares-emblem-core,
+.render-reduced .ares-wordmark-svg .ares-wordmark-main,
+.safe-mode .ares-wordmark-svg .ares-emblem-core,
+.safe-mode .ares-wordmark-svg .ares-wordmark-main {
+    animation: none;
+}
+
+.browser-firefox .status-dot,
+.render-low .status-dot,
+.render-reduced .status-dot,
+.safe-mode .status-dot {
+    animation: none;
+    box-shadow: 0 0 3px currentColor;
+}
+
+.browser-firefox .glow,
+.browser-firefox .telemetry-glyph,
+.browser-firefox .telemetry-label,
+.render-low .glow,
+.render-low .telemetry-glyph,
+.render-low .telemetry-label,
+.render-reduced .glow,
+.render-reduced .telemetry-glyph,
+.render-reduced .telemetry-label,
+.safe-mode .glow,
+.safe-mode .telemetry-glyph,
+.safe-mode .telemetry-label {
+    text-shadow: none;
+}
+
+.browser-firefox .diagnostic-panel,
+.browser-firefox .facility-panel,
+.render-low .diagnostic-panel,
+.render-low .facility-panel,
+.render-reduced .diagnostic-panel,
+.render-reduced .facility-panel,
+.safe-mode .diagnostic-panel,
+.safe-mode .facility-panel {
+    box-shadow: inset 0 0 24px rgba(57, 255, 20, 0.035), 0 0 18px rgba(0, 0, 0, 0.42);
+}
+
+.browser-firefox .diagnostic-card,
+.browser-firefox .facility-card,
+.render-low .diagnostic-card,
+.render-low .facility-card,
+.render-reduced .diagnostic-card,
+.render-reduced .facility-card,
+.safe-mode .diagnostic-card,
+.safe-mode .facility-card {
+    box-shadow: inset 0 0 0 1px rgba(57, 255, 20, 0.04);
+}
+
+.render-low .facility-atmosphere-canvas,
+.render-reduced .facility-atmosphere-canvas,
+.safe-mode .facility-atmosphere-canvas {
+    opacity: 0.35;
+}

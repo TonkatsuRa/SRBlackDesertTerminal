@@ -421,7 +421,7 @@ function resumeRealtimePanels() {
         diagnosticLastRender = 0;
         diagnosticAnimFrame = requestAnimationFrame(runDiagnosticLoop);
     }
-    if (facilityActive && !facilityAnimFrame) {
+    if (facilityActive && !facilityAnimFrame && !(typeof safeModeActive === 'function' && safeModeActive())) {
         facilityLastRender = 0;
         facilityAnimFrame = requestAnimationFrame(runFacilityLoop);
     }
@@ -1191,7 +1191,36 @@ const DIAGNOSTIC_WIDGET_REGISTRY = new Map();
 function diagnosticRenderProfile() {
     return typeof getEffectiveRenderProfile === 'function'
         ? getEffectiveRenderProfile()
-        : { name: 'fallback', schedulerMs: 120, sideTelemetryMs: 180, facilityMs: 140, radar: { frameMs: 120, sweepTrail: 5, clutterCount: 8, contactLabels: true, glow: false, pulse: true } };
+        : {
+            name: 'fallback',
+            schedulerMs: 120,
+            sideTelemetryMs: 180,
+            facilityMs: 220,
+            radar: { frameMs: 120, sweepTrail: 5, clutterCount: 8, contactLabels: true, glow: false, pulse: true },
+            facility: { backgroundRefreshFrames: 180, packetCount: 3, contactCount: 1, readoutEvery: 8, motion: false, pulse: false }
+        };
+}
+
+function diagnosticFacilityProfile() {
+    const profile = diagnosticRenderProfile();
+    return {
+        backgroundRefreshFrames: 180,
+        packetCount: 3,
+        contactCount: 1,
+        readoutEvery: 8,
+        motion: false,
+        pulse: false,
+        ...(profile.facility || {})
+    };
+}
+
+function facilityMotionActive(facilityProfile = diagnosticFacilityProfile()) {
+    return Boolean(facilityProfile.motion)
+        && !prefersReducedMotion
+        && !document.hidden
+        && AppState.networkOnline
+        && !effectsLowActive()
+        && !(typeof safeModeActive === 'function' && safeModeActive());
 }
 
 function diagnosticWidgetInterval(widgetId, fallbackMs = 160) {
@@ -2507,6 +2536,10 @@ function renderDiagnosticDashboard(timestamp = performance.now(), options = {}) 
 
 function runDiagnosticLoop(timestamp = 0) {
     if (!diagnosticActive || !AppState.networkOnline) return;
+    if (document.hidden) {
+        diagnosticAnimFrame = null;
+        return;
+    }
     const interval = diagnosticRenderProfile().schedulerMs || effectsFrameMs(80, 140, 180);
     if (!diagnosticLastRender || timestamp - diagnosticLastRender >= interval) {
         diagnosticLastRender = timestamp;
@@ -2758,10 +2791,12 @@ function drawFacilityZoneShape(widget, zone, rect) {
 function renderFacilityAtmosphere(frame, zones) {
     const canvas = getById('facilityAtmosphereCanvas');
     if (!canvas) return;
+    const facilityProfile = diagnosticFacilityProfile();
+    const refreshEvery = Math.max(30, Number(facilityProfile.backgroundRefreshFrames || 180));
 
     // The atmospheric layer is static. Avoid forcing a layout read every
     // facility frame; refresh occasionally to catch resize/profile changes.
-    if (canvas.dataset.facilityAtmosphereKey && frame % 30 !== 0 && !prefersReducedMotion) return;
+    if (canvas.dataset.facilityAtmosphereKey && frame % refreshEvery !== 0 && !prefersReducedMotion) return;
 
     const rect = canvas.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return;
@@ -2837,6 +2872,8 @@ function renderFacilityOfflineState(host) {
 function renderFacilityCommandCenterWidget(host, frame, zones, links, contacts) {
     const widget = createSvgWidget(host, { cols: 96, rows: 42, cellWidth: 8, cellHeight: 10, kind: 'facility-command-center' });
     if (!widget) return;
+    const facilityProfile = diagnosticFacilityProfile();
+    const motionActive = facilityMotionActive(facilityProfile);
     const staticKey = JSON.stringify({
         zones: zones.map(zone => [zone.id, zone.label, zone.status, zone.state, zone.x, zone.y, zone.w, zone.h]),
         links: links.map(link => [link.from, link.to, link.state])
@@ -2889,31 +2926,32 @@ function renderFacilityCommandCenterWidget(host, frame, zones, links, contacts) 
         });
         svgTextGlyph(widget.glyphLayer, zone.state === 'alert' ? '△' : zone.state === 'warn' ? '◇' : '□', rect.col + rect.cols - 1.2, rect.row + 1.1, {
             className: cls,
-            opacity: zone.state === 'alert' && !prefersReducedMotion ? 0.74 + Math.sin(frame * 0.16) * 0.18 : 0.92
+            opacity: zone.state === 'alert' && motionActive && facilityProfile.pulse ? 0.74 + Math.sin(frame * 0.16) * 0.18 : 0.88
         });
     });
 
-    const packetLimit = effectsLowActive() ? 5 : links.length;
+    const packetLimit = Math.max(0, Math.min(links.length, Number(facilityProfile.packetCount ?? 3)));
     links.slice(0, packetLimit).forEach((link, index) => {
         const start = rects[link.from];
         const end = rects[link.to];
         if (!start || !end) return;
         const cls = facilityStateClass(link.state);
-        const t = prefersReducedMotion ? link.phase : (frame * (0.01 + index * 0.0009) + link.phase) % 1;
+        const t = motionActive ? (frame * (0.006 + index * 0.0005) + link.phase) % 1 : link.phase;
         const col = start.centerCol + (end.centerCol - start.centerCol) * t;
         const row = start.centerRow + (end.centerRow - start.centerRow) * t;
-        svgTextGlyph(widget.glyphLayer, link.state === 'alert' ? '◆' : '●', col, row, { className: cls, opacity: link.state === 'alert' ? 0.9 : 0.72 });
+        svgTextGlyph(widget.glyphLayer, link.state === 'alert' ? '◆' : '●', col, row, { className: cls, opacity: link.state === 'alert' ? 0.82 : 0.64 });
     });
 
-    contacts.forEach((contact, index) => {
+    const contactLimit = Math.max(0, Math.min(contacts.length, Number(facilityProfile.contactCount ?? 1)));
+    contacts.slice(0, contactLimit).forEach((contact, index) => {
         const start = rects[contact.from];
         const end = rects[contact.to];
         if (!start || !end) return;
-        const t = prefersReducedMotion ? contact.phase : (contact.phase + frame * (0.006 + index * 0.001)) % 1;
-        const wobble = prefersReducedMotion ? 0 : Math.sin(frame * 0.09 + index) * 0.9;
+        const t = motionActive ? (contact.phase + frame * (0.004 + index * 0.0008)) % 1 : contact.phase;
+        const wobble = motionActive ? Math.sin(frame * 0.06 + index) * 0.45 : 0;
         const col = start.centerCol + (end.centerCol - start.centerCol) * t;
         const row = start.centerRow + (end.centerRow - start.centerRow) * t + wobble;
-        svgTextGlyph(widget.glyphLayer, '◆', col, row, { className: 'telemetry-red', opacity: frame % 10 < 5 ? 0.7 : 0.96 });
+        svgTextGlyph(widget.glyphLayer, '◆', col, row, { className: 'telemetry-red', opacity: motionActive ? 0.82 : 0.68 });
     });
 
 }
@@ -3018,6 +3056,7 @@ function renderFacilityStatus(timestamp = 0) {
     const host = getById('facilityCanvas');
     if (!host) return;
     const frame = Number.isFinite(facilityFrame) ? facilityFrame : Math.round(timestamp / 33);
+    const facilityProfile = diagnosticFacilityProfile();
     const zones = getFacilityZones();
     const links = getFacilityLinks();
     const contacts = getFacilityContacts();
@@ -3028,14 +3067,21 @@ function renderFacilityStatus(timestamp = 0) {
         renderFacilityCommandCenterWidget(host, frame, zones, links, contacts);
     }
 
-    if (frame < 3 || frame % 4 === 0 || prefersReducedMotion) {
+    const readoutEvery = Math.max(1, Number(facilityProfile.readoutEvery || 8));
+    const safeMode = typeof safeModeActive === 'function' && safeModeActive();
+    if (frame < 3 || frame % readoutEvery === 0 || prefersReducedMotion || safeMode) {
         updateFacilityReadouts(frame);
     }
 }
 
 function runFacilityLoop(timestamp = 0) {
     if (!facilityActive || !AppState.networkOnline) return;
-    const interval = Math.max(diagnosticRenderProfile().facilityMs || effectsFrameMs(34, 80, 140), 120);
+    if (document.hidden || (typeof safeModeActive === 'function' && safeModeActive())) {
+        facilityAnimFrame = null;
+        return;
+    }
+    const profile = diagnosticRenderProfile();
+    const interval = Math.max(profile.facilityMs || effectsFrameMs(34, 80, 140), 120);
     if (!facilityLastRender || timestamp - facilityLastRender >= interval) {
         facilityLastRender = timestamp;
         facilityFrame++;
@@ -3061,7 +3107,7 @@ function showFacilityStatus() {
     renderFacilityStatus(performance.now());
     AudioEngine.bootBeep();
     Animator.dialogOpen(overlay);
-    if (!prefersReducedMotion) {
+    if (!prefersReducedMotion && !(typeof safeModeActive === 'function' && safeModeActive())) {
         facilityAnimFrame = requestAnimationFrame(runFacilityLoop);
     }
 }
@@ -3110,6 +3156,7 @@ function getDiagnosticPerformanceSnapshot() {
         sideLoop: Boolean(sideTelemetryAnimFrame),
         schedulerMs: profile.schedulerMs,
         facilityMs: profile.facilityMs,
+        facilityProfile: profile.facility || null,
         sideTelemetryMs: profile.sideTelemetryMs,
         radarMs: profile.radar?.frameMs,
         widgets: widgetIds.map(([key, id]) => {
