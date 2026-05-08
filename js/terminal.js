@@ -121,6 +121,7 @@ function updateShellTelemetry() {
 }
 
 function startShellTelemetry() {
+    if (!document.getElementById('shellSystemTime')) return;
     updateShellTelemetry();
     if (shellTelemetryTimer) return;
     shellTelemetryTimer = setInterval(updateShellTelemetry, 1000);

@@ -2232,6 +2232,69 @@ function runSideTelemetryLoop(timestamp = 0) {
     sideTelemetryAnimFrame = requestAnimationFrame(runSideTelemetryLoop);
 }
 
+function renderSideSignalSpectrum(frame = 0) {
+    const widget = createSvgWidget('sideSignalSpectrum', { cols: 40, rows: 10, cellHeight: 9, kind: 'side-signal-spectrum-analyzer' });
+    if (!widget) return;
+    drawDashboardGrid(widget, {
+        className: AppState.networkOnline ? 'telemetry-cyan' : 'telemetry-red',
+        colStep: 5,
+        rowStep: 2
+    });
+    svgLabel(widget.labelLayer, 'SPECTRUM ANALYZER', 2, 1, { className: AppState.networkOnline ? 'telemetry-amber' : 'telemetry-red' });
+
+    if (!AppState.networkOnline) {
+        renderFixedGlyphLine(widget.glyphLayer, 5, 'NO CARRIER // SIGNAL BUS OFFLINE', {
+            col: 3,
+            width: 34,
+            className: 'telemetry-red',
+            opacity: 0.88
+        });
+        drawSvgGuideLine(widget, 4, 7, 36, 7, { className: 'telemetry-red', opacity: 0.28 });
+        return;
+    }
+
+    const reduced = prefersReducedMotion || (typeof safeModeActive === 'function' && safeModeActive());
+    const activeFrame = reduced ? 12 : frame;
+    const peakPoints = [];
+    for (let col = 4; col <= 35; col++) {
+        const normalized = (col - 4) / 31;
+        const carrierA = Math.exp(-((normalized - 0.28) ** 2) / 0.004) * 0.82;
+        const carrierB = Math.exp(-((normalized - 0.62) ** 2) / 0.007) * 0.7;
+        const carrierC = Math.exp(-((normalized - 0.84) ** 2) / 0.003) * 0.88;
+        const drift = Math.sin(activeFrame * 0.12 + col * 0.63) * 0.15;
+        const floor = Math.sin(col * 1.7 + activeFrame * 0.04) * 0.08;
+        const level = clampDiagnostic(0.18 + carrierA + carrierB + carrierC + drift + floor, 0.06, 1);
+        const height = Math.max(1, Math.round(level * 6));
+        const cls = level > 0.82 ? 'telemetry-red' : level > 0.64 ? 'telemetry-amber' : level > 0.42 ? 'telemetry-green' : 'telemetry-cyan';
+        for (let rowOffset = 0; rowOffset < height; rowOffset++) {
+            const row = 8 - rowOffset;
+            const glyph = rowOffset === height - 1 ? blockGlyph(level) : '█';
+            svgTextGlyph(widget.glyphLayer, glyph, col, row, {
+                className: cls,
+                opacity: 0.36 + level * 0.5 - rowOffset * 0.025
+            });
+        }
+        peakPoints.push(widgetGridPixel(widget, col, 7.6 - level * 5.8));
+    }
+
+    svgPolyline(widget.glyphLayer, peakPoints, { className: 'telemetry-amber telemetry-trace-thin', opacity: 0.52 });
+    [12, 24, 33].forEach((col, index) => {
+        const pulse = reduced ? 0.68 : 0.56 + Math.sin(activeFrame * (0.11 + index * 0.02)) * 0.22;
+        drawSvgGuideLine(widget, col, 2.2, col, 8.5, {
+            className: index === 2 ? 'telemetry-red' : 'telemetry-cyan',
+            opacity: 0.14 + pulse * 0.16
+        });
+        svgTextGlyph(widget.glyphLayer, index === 2 ? '◆' : '●', col, 2, {
+            className: index === 2 ? 'telemetry-red' : 'telemetry-cyan',
+            opacity: pulse
+        });
+    });
+    svgLabel(widget.labelLayer, '10Hz', 3, 9, { className: 'telemetry-dim' });
+    svgLabel(widget.labelLayer, '1k', 18, 9, { className: 'telemetry-dim' });
+    svgLabel(widget.labelLayer, '10k', 33, 9, { className: 'telemetry-dim' });
+    svgLabel(widget.labelLayer, `${Math.round(84 + Math.sin(activeFrame * 0.09) * 4)}%`, 33, 1, { className: 'telemetry-green' });
+}
+
 function renderSideDiagnosticPreview(frame = 0) {
     const widget = createSvgWidget('sideDiagnosticTelemetry', { cols: 36, rows: 9, cellHeight: 10, kind: 'side-diagnostic-live-svg' });
     if (!widget) return;
@@ -2357,6 +2420,7 @@ function renderSideFacilityPreview(frame = 0) {
 }
 
 function renderSideGlyphTelemetry(frame = 0) {
+    renderSideSignalSpectrum(frame);
     renderSideDiagnosticPreview(frame);
     renderSideFacilityPreview(frame);
 }

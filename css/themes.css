@@ -672,6 +672,21 @@ body {
     max-height: 34px;
 }
 
+.signal-spectrum-card {
+    flex: 0 0 auto;
+}
+
+.signal-spectrum-widget {
+    height: 92px;
+    min-height: 92px;
+    padding: 0;
+}
+
+.signal-spectrum-widget .telemetry-svg {
+    height: 92px;
+    min-height: 92px;
+}
+
 .right-actions-card {
     flex: 0 0 auto;
     display: grid;
