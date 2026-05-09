@@ -251,19 +251,20 @@
                 <button id="openFileBtn" type="button">OPEN LOCAL FILE</button>
                 <button id="addEntryBtn" type="button">ADD ENTRY</button>
                 <button id="downloadMdBtn" type="button">DOWNLOAD MD</button>
+                <button id="downloadZipBtn" type="button">DOWNLOAD ZIP PACKAGE</button>
                 <button id="downloadDatBtn" type="button">DOWNLOAD ENCRYPTED DAT</button>
                 <button id="saveLocalBtn" type="button" class="hidden">SAVE LOCAL FILE</button>
             </div>
         </header>
 
         <p id="status" class="status" role="status" aria-live="polite"></p>
-        <input id="fileInput" class="hidden" type="file" accept=".md,.txt,.dat,.db,.bin">
+        <input id="fileInput" class="hidden" type="file" accept=".md,.markdown,.txt,.zip,.dat,.db,.bin">
 
         <div class="layout">
             <section class="panel sources" aria-label="Database source list">
                 <h2>SOURCES</h2>
                 <div id="sourceList" class="source-list"></div>
-                <p class="note">Manifest loading uses <strong>databases/manifest.json</strong>. If you opened this page directly as a local file and fetch is blocked, use OPEN LOCAL FILE.</p>
+                <p class="note">Manifest loading uses <strong>databases/manifest.json</strong> and only shows packages that can be verified inside <strong>databases/</strong>. Static GitHub Pages cannot scan folders automatically, so the manifest remains the source list.</p>
             </section>
 
             <section class="panel" aria-label="Database entry editor">
@@ -272,7 +273,7 @@
                     <label>Package id
                         <input id="metaId" type="text">
                     </label>
-                    <label>Password
+                    <label>Terminal password
                         <input id="metaPassword" type="text">
                     </label>
                     <label>Title
@@ -329,6 +330,9 @@
 
     <script>
         const ENCRYPTION_KEY = 'Shelby';
+        const ZIP_SCRIPT_URL = 'https://cdn.jsdelivr.net/npm/@zip.js/zip.js@2.8.26/dist/zip-full.min.js';
+        // Same transport key used by the terminal ZIP loader. This is obfuscation, not real secrecy.
+        const DATABASE_ZIP_KEY_HEX_PARTS = ['5368656c', '62795368', '656c6279', '313233'];
         const DEFAULT_DATABASE = `---
 id: database1
 title: Personnel Registry
@@ -365,9 +369,94 @@ Last confirmed in Command Core during external relay failure.
         };
 
         const els = {};
+        let zipLibPromise = null;
 
         function byId(id) {
             return document.getElementById(id);
+        }
+
+        function databaseZipPassword() {
+            return DATABASE_ZIP_KEY_HEX_PARTS
+                .map(part => String(part || '').match(/../g) || [])
+                .flat()
+                .map(hex => String.fromCharCode(Number.parseInt(hex, 16)))
+                .join('');
+        }
+
+        function loadZipLibrary() {
+            if (window.zip && window.zip.ZipReader) return Promise.resolve(window.zip);
+            if (zipLibPromise) return zipLibPromise;
+            zipLibPromise = new Promise((resolve, reject) => {
+                const existing = document.querySelector('script[data-editor-lib="zip"]');
+                if (existing) {
+                    existing.addEventListener('load', () => resolve(window.zip), { once: true });
+                    existing.addEventListener('error', () => reject(new Error('ZIP library failed to load')), { once: true });
+                    return;
+                }
+                const script = document.createElement('script');
+                script.src = ZIP_SCRIPT_URL;
+                script.defer = true;
+                script.dataset.editorLib = 'zip';
+                script.onload = () => resolve(window.zip);
+                script.onerror = () => reject(new Error('ZIP library failed to load'));
+                document.head.appendChild(script);
+            }).then(zipLib => {
+                if (!zipLib || !zipLib.ZipReader || !zipLib.ZipWriter || !zipLib.BlobReader || !zipLib.BlobWriter || !zipLib.TextReader || !zipLib.TextWriter) {
+                    throw new Error('ZIP support unavailable');
+                }
+                return zipLib;
+            }).catch(error => {
+                zipLibPromise = null;
+                throw error;
+            });
+            return zipLibPromise;
+        }
+
+        function isZipPackage(fileName = '') {
+            return /\.zip$/i.test(String(fileName || ''));
+        }
+
+        function isDatPackage(fileName = '') {
+            return /\.(dat|db|bin)$/i.test(String(fileName || ''));
+        }
+
+        function isTextDatabasePackage(fileName = '') {
+            return /\.(md|markdown|txt)$/i.test(String(fileName || ''));
+        }
+
+        function databaseFileName(item = {}) {
+            return String(item.file || item.filename || '')
+                .trim()
+                .replace(/\\/g, '/')
+                .replace(/^databases\//i, '');
+        }
+
+        function databasePathForItem(item = {}) {
+            const file = databaseFileName(item);
+            if (!file || file.includes('..') || file.startsWith('/') || /^[a-z][a-z0-9+.-]*:/i.test(file)) return '';
+            if (!/\.(md|markdown|txt|zip|dat|db|bin)$/i.test(file)) return '';
+            return `databases/${file}`;
+        }
+
+        function zipEntryName(entry = {}) {
+            return String(entry.filename || entry.name || '').replace(/\\/g, '/');
+        }
+
+        function normalizeZipEntryName(name = '') {
+            return String(name || '').replace(/\\/g, '/').replace(/^\.\//, '').toLowerCase();
+        }
+
+        function selectZipDatabaseEntry(entries = [], preferredName = '') {
+            const files = entries.filter(entry => !entry.directory && zipEntryName(entry));
+            const preferred = normalizeZipEntryName(preferredName);
+            if (preferred) {
+                const match = files.find(entry => {
+                    const name = normalizeZipEntryName(zipEntryName(entry));
+                    return name === preferred || name.endsWith(`/${preferred}`);
+                });
+                if (match) return match;
+            }
+            return files.find(entry => isTextDatabasePackage(zipEntryName(entry))) || null;
         }
 
         function normalizeKey(key) {
@@ -481,6 +570,34 @@ Last confirmed in Command Core during external relay failure.
             finishEntry();
 
             return { metadata, entries, source };
+        }
+
+        function parseDatabaseText(text, sourceName = 'database.md') {
+            const parsed = parseDatabaseMarkdown(text, sourceName);
+            if (!parsed.entries.length) throw new Error('No entries found');
+            return parsed;
+        }
+
+        async function readZipDatabasePackage(blob, item = {}, sourceName = 'database.zip') {
+            const zipLib = await loadZipLibrary();
+            const reader = new zipLib.ZipReader(new zipLib.BlobReader(blob), { useWebWorkers: false });
+            try {
+                const entries = await reader.getEntries();
+                const entry = selectZipDatabaseEntry(entries, item.innerFile || item.entry || item.databaseFile);
+                if (!entry) throw new Error('No Markdown database found in ZIP package');
+                const content = await entry.getData(new zipLib.TextWriter(), {
+                    password: databaseZipPassword(),
+                    useWebWorkers: false
+                });
+                const entryName = zipEntryName(entry);
+                return {
+                    content,
+                    entryName,
+                    source: `${sourceName}:${entryName}`
+                };
+            } finally {
+                await reader.close();
+            }
         }
 
         function serializeDatabase() {
@@ -717,14 +834,44 @@ Last confirmed in Command Core during external relay failure.
                 const response = await fetch('databases/manifest.json', { cache: 'no-store' });
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const manifest = await response.json();
-                renderSourceList(manifest.databases || []);
-                setStatus('Loaded databases/manifest.json.');
-                if (manifest.databases && manifest.databases[0]) loadDatabaseFromSite(manifest.databases[0]);
+                const manifestItems = Array.isArray(manifest.databases) ? manifest.databases : [];
+                const available = await verifiedManifestDatabases(manifestItems);
+                renderSourceList(available);
+                setStatus(`Loaded databases/manifest.json. Verified ${available.length}/${manifestItems.length} package(s) in databases/.`, available.length ? 'ok' : 'warn');
+                if (available[0]) loadDatabaseFromSite(available[0]);
             } catch (error) {
                 renderSourceList([]);
                 applyParsedDatabase(parseDatabaseMarkdown(DEFAULT_DATABASE, 'fallback'), 'database1.md');
                 setStatus('Manifest fetch failed. Loaded editor fallback; use OPEN LOCAL FILE for local editing.', 'warn');
             }
+        }
+
+        async function manifestItemExists(item) {
+            const path = databasePathForItem(item);
+            if (!path) return false;
+            try {
+                const response = await fetch(path, { method: 'HEAD', cache: 'no-store' });
+                if (response.ok) return true;
+                if (![405, 501].includes(response.status)) return false;
+            } catch (error) {
+                return false;
+            }
+
+            try {
+                const response = await fetch(path, { cache: 'no-store' });
+                return response.ok;
+            } catch (error) {
+                return false;
+            }
+        }
+
+        async function verifiedManifestDatabases(databases = []) {
+            const safeItems = databases.filter(item => databasePathForItem(item));
+            const checks = await Promise.all(safeItems.map(async item => ({
+                item,
+                exists: await manifestItemExists(item)
+            })));
+            return checks.filter(check => check.exists).map(check => check.item);
         }
 
         function renderSourceList(databases) {
@@ -747,14 +894,30 @@ Last confirmed in Command Core during external relay failure.
         }
 
         async function loadDatabaseFromSite(item) {
+            const file = databaseFileName(item);
+            const path = databasePathForItem(item);
+            if (!path) {
+                setStatus('Manifest entry rejected. Database files must stay inside databases/.', 'error');
+                return;
+            }
+
             try {
-                const response = await fetch(`databases/${item.file}`, { cache: 'no-store' });
+                const response = await fetch(path, { cache: 'no-store' });
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                const text = await response.text();
-                applyParsedDatabase(parseDatabaseMarkdown(text, item.file), item.file);
-                setStatus(`Loaded ${item.file}.`);
+
+                if (isZipPackage(file) || item.format === 'zip') {
+                    const extracted = await readZipDatabasePackage(await response.blob(), item, file);
+                    applyParsedDatabase(parseDatabaseText(extracted.content, extracted.entryName || file), extracted.source);
+                    setStatus(`Loaded ZIP package ${file} using internal transport key.`);
+                    return;
+                }
+
+                let text = await response.text();
+                if (isDatPackage(file)) text = decodeEncrypted(text);
+                applyParsedDatabase(parseDatabaseText(text, file), file);
+                setStatus(`Loaded ${file}.`);
             } catch (error) {
-                setStatus(`Could not load ${item.file}. Check path casing or use local file import.`, 'error');
+                setStatus(`Could not load ${file}. Check path casing, ZIP key, or use local file import.`, 'error');
             }
         }
 
@@ -781,26 +944,38 @@ Last confirmed in Command Core during external relay failure.
             }
         }
 
+        async function openLocalZipFile(file) {
+            try {
+                const extracted = await readZipDatabasePackage(file, {}, file.name);
+                applyParsedDatabase(parseDatabaseText(extracted.content, extracted.entryName || file.name), extracted.source);
+                setStatus(`Loaded local ZIP package: ${file.name}`);
+            } catch (error) {
+                setStatus('Could not open ZIP package. Check ZIP password/key or database file inside.', 'error');
+            }
+        }
+
         function openLocalFile(file) {
+            if (isZipPackage(file.name)) {
+                openLocalZipFile(file);
+                return;
+            }
+
             const reader = new FileReader();
             reader.onload = event => {
                 try {
                     let text = String(event.target.result || '');
-                    if (/\.(dat|db|bin)$/i.test(file.name)) text = decodeEncrypted(text);
-                    const parsed = parseDatabaseMarkdown(text, file.name);
-                    if (!parsed.entries.length) throw new Error('No entries found');
-                    applyParsedDatabase(parsed, file.name);
+                    if (isDatPackage(file.name)) text = decodeEncrypted(text);
+                    applyParsedDatabase(parseDatabaseText(text, file.name), file.name);
                     setStatus(`Loaded local file: ${file.name}`);
                 } catch (error) {
-                    setStatus('Could not parse database file. Check Markdown structure or encrypted DAT format.', 'error');
+                    setStatus('Could not parse database file. Check Markdown structure, ZIP key, or encrypted DAT format.', 'error');
                 }
             };
             reader.onerror = () => setStatus('Could not read local file.', 'error');
             reader.readAsText(file);
         }
 
-        function downloadFile(filename, content, type) {
-            const blob = new Blob([content], { type });
+        function downloadBlob(filename, blob) {
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
@@ -811,10 +986,35 @@ Last confirmed in Command Core during external relay failure.
             URL.revokeObjectURL(url);
         }
 
+        function downloadFile(filename, content, type) {
+            downloadBlob(filename, new Blob([content], { type }));
+        }
+
         function downloadMarkdown() {
             const filename = `${state.metadata.id || 'database'}.md`;
             downloadFile(filename, serializeDatabase(), 'text/markdown;charset=utf-8');
             setStatus(`Downloaded ${filename}.`);
+        }
+
+        async function downloadZipPackage() {
+            try {
+                const zipLib = await loadZipLibrary();
+                const innerFilename = `${state.metadata.id || 'database'}.md`;
+                const zipFilename = `${state.metadata.id || 'database'}.zip`;
+                const writer = new zipLib.ZipWriter(new zipLib.BlobWriter('application/zip'), {
+                    useWebWorkers: false
+                });
+                await writer.add(innerFilename, new zipLib.TextReader(serializeDatabase()), {
+                    password: databaseZipPassword(),
+                    encryptionStrength: 3,
+                    useWebWorkers: false
+                });
+                const blob = await writer.close();
+                downloadBlob(zipFilename, blob);
+                setStatus(`Downloaded encrypted ZIP package ${zipFilename}. ZIP uses the internal transport key, not the terminal password.`);
+            } catch (error) {
+                setStatus('Could not create encrypted ZIP package. Check network access for zip.js.', 'error');
+            }
         }
 
         function downloadEncryptedDat() {
@@ -868,6 +1068,7 @@ Last confirmed in Command Core during external relay failure.
             byId('duplicateEntryBtn').addEventListener('click', duplicateEntry);
             byId('removeEntryBtn').addEventListener('click', removeEntry);
             byId('downloadMdBtn').addEventListener('click', downloadMarkdown);
+            byId('downloadZipBtn').addEventListener('click', downloadZipPackage);
             byId('downloadDatBtn').addEventListener('click', downloadEncryptedDat);
             byId('saveLocalBtn').addEventListener('click', saveLocalFile);
             els.fileInput.addEventListener('change', event => {
