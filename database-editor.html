@@ -193,6 +193,147 @@
             margin: 12px 0;
         }
 
+        .template-groups {
+            display: grid;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .template-group {
+            display: grid;
+            gap: 7px;
+        }
+
+        .template-title {
+            color: var(--cyan);
+            font-size: 0.78rem;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        .template-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px;
+        }
+
+        .template-btn {
+            min-height: 34px;
+            padding: 6px 9px;
+            border-color: rgba(32, 194, 14, 0.28);
+            color: var(--text);
+            background: rgba(0, 14, 4, 0.66);
+            font-size: 0.78rem;
+        }
+
+        .template-btn:hover {
+            border-color: var(--cyan);
+            color: var(--cyan);
+        }
+
+        .template-popup-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 50;
+            display: grid;
+            place-items: center;
+            padding: 18px;
+            background: rgba(0, 0, 0, 0.58);
+        }
+
+        .template-popup-overlay.hidden {
+            display: none;
+        }
+
+        .template-popup {
+            width: min(780px, 100%);
+            max-height: min(760px, 88svh);
+            overflow: auto;
+            border: 1px solid var(--amber-line);
+            background:
+                linear-gradient(rgba(32, 194, 14, 0.025) 1px, transparent 1px),
+                rgba(3, 12, 5, 0.97);
+            background-size: 100% 4px, auto;
+            box-shadow: 0 0 42px rgba(255, 176, 0, 0.16);
+            padding: 14px;
+        }
+
+        .template-popup-header {
+            display: flex;
+            gap: 12px;
+            align-items: start;
+            justify-content: space-between;
+            border-bottom: 1px solid rgba(32, 194, 14, 0.2);
+            margin-bottom: 12px;
+            padding-bottom: 10px;
+        }
+
+        .template-popup-title {
+            color: var(--amber);
+            font-size: 1rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .template-popup-close {
+            min-height: 34px;
+            padding: 5px 9px;
+        }
+
+        .template-editor {
+            display: grid;
+            gap: 10px;
+        }
+
+        .template-editor-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .template-preview {
+            min-height: 130px;
+            border: 1px solid rgba(32, 194, 14, 0.22);
+            background: rgba(0, 8, 3, 0.7);
+            color: var(--green);
+            padding: 10px;
+            white-space: pre;
+            overflow: auto;
+            line-height: 1.35;
+        }
+
+        .template-value-controls {
+            display: grid;
+            gap: 8px;
+            border: 1px solid rgba(32, 194, 14, 0.18);
+            background: rgba(0, 8, 3, 0.44);
+            padding: 10px;
+        }
+
+        .template-control-row {
+            display: grid;
+            grid-template-columns: minmax(86px, 0.7fr) minmax(140px, 1.4fr) 64px;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .template-control-row input[type="range"] {
+            accent-color: var(--amber);
+            padding: 0;
+        }
+
+        .template-control-row input[type="number"] {
+            padding: 7px;
+        }
+
+        .template-control-label {
+            color: var(--cyan);
+            font-size: 0.78rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
         .danger {
             border-color: rgba(255, 75, 75, 0.52);
             color: var(--red);
@@ -313,6 +454,9 @@
                 <label>Optional redacted / glitch text
                     <input id="entryRedacted" type="text">
                 </label>
+                <div class="entry-actions">
+                    <button id="openTemplatePopupBtn" type="button">MESSAGE CONTENT TEMPLATES</button>
+                </div>
                 <label>Body text
                     <textarea id="entryBody"></textarea>
                 </label>
@@ -327,6 +471,20 @@
             </section>
         </div>
     </main>
+
+    <div id="templatePopupOverlay" class="template-popup-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="templatePopupTitle">
+        <div class="template-popup">
+            <div class="template-popup-header">
+                <div>
+                    <div id="templatePopupTitle" class="template-popup-title">Message Content Templates</div>
+                    <p id="templatePopupHint" class="note">Choose a template, edit its content, then insert it into the Body text.</p>
+                </div>
+                <button id="templatePopupCloseBtn" class="template-popup-close" type="button">[ CLOSE ]</button>
+            </div>
+            <div id="templatePalette" class="template-groups"></div>
+            <div id="templateEditor" class="template-editor hidden"></div>
+        </div>
+    </div>
 
     <script>
         const ENCRYPTION_KEY = 'Shelby';
@@ -361,6 +519,184 @@ Facility Director assigned by Ares Macrotechnology Special Projects.
 Last confirmed in Command Core during external relay failure.
 `;
 
+        const MESSAGE_TEMPLATES = [
+            {
+                category: 'ASCII Art',
+                items: [
+                    {
+                        label: 'ARES Stamp',
+                        text: [
+                            '        /\\',
+                            '   ____/  \\____',
+                            '  /   A R E S  \\',
+                            ' / MACROTECH     \\',
+                            '/_________________\\'
+                        ].join('\n')
+                    },
+                    {
+                        label: 'Warning Sigil',
+                        text: [
+                            '      /!\\',
+                            '     /___\\',
+                            '  WARNING NODE',
+                            '  AUTHORIZED EYES ONLY'
+                        ].join('\n')
+                    },
+                    {
+                        label: 'Terminal Skull',
+                        text: [
+                            '   .-""""-.',
+                            '  /  X  X  \\',
+                            ' |    __    |',
+                            '  \\  ----  /',
+                            '   `-.__.-`'
+                        ].join('\n')
+                    }
+                ]
+            },
+            {
+                category: 'Frames',
+                items: [
+                    {
+                        label: 'Report Frame',
+                        type: 'frame',
+                        title: 'ARES INTERNAL REPORT',
+                        content: 'SUBJECT : \nSTATUS  : \nNOTES   : '
+                    },
+                    {
+                        label: 'Redacted Frame',
+                        type: 'frame',
+                        title: 'REDACTED PACKAGE',
+                        content: 'CLEARANCE : \nSOURCE    : \nSUMMARY   : '
+                    },
+                    {
+                        label: 'Incident Frame',
+                        type: 'frame',
+                        title: 'INCIDENT ESCALATION',
+                        content: 'TIME     : \nLOCATION : \nRESPONSE : '
+                    }
+                ]
+            },
+            {
+                category: 'Lines',
+                items: [
+                    { label: 'Thin Line', text: '────────────────────────────────────────────' },
+                    { label: 'Double Line', text: '════════════════════════════════════════════' },
+                    { label: 'Data Line', text: '----[ DATA CHANNEL ]------------------------' },
+                    { label: 'Alert Line', text: '!!!! ALERT / ALERT / ALERT / ALERT !!!!' }
+                ]
+            },
+            {
+                category: 'Boxes',
+                items: [
+                    {
+                        label: 'Small Box',
+                        type: 'box',
+                        title: '',
+                        content: 'Text line'
+                    },
+                    {
+                        label: 'Checklist Box',
+                        type: 'box',
+                        title: 'CHECKLIST',
+                        content: '[ ] CONFIRM\n[ ] LOG\n[ ] ESCALATE'
+                    },
+                    {
+                        label: 'Access Box',
+                        type: 'frame',
+                        title: 'ACCESS CHECK',
+                        content: 'LEVEL : \nTOKEN : '
+                    }
+                ]
+            },
+            {
+                category: 'Symbols',
+                items: [
+                    { label: 'Status Row', text: '◆ ONLINE   ◇ DEGRADED   △ WARNING   □ SEALED' },
+                    { label: 'Access Row', text: 'EMPLOYEE ░░░  ELEVATED ▒▒▒  ADMIN ███' },
+                    { label: 'Entity Row', text: '○ TRACE   ◇ CONTACT   △ HOSTILE   ◆ UNKNOWN' },
+                    { label: 'Route Row', text: '[CORE]──[LAB]──[ARCHIVE]──[GATE]' }
+                ]
+            },
+            {
+                category: 'Separators',
+                items: [
+                    { label: 'Command Break', text: '\n--- ARES COMMAND CHANNEL --------------------\n' },
+                    { label: 'File Break', text: '\n╠═ FILE SEGMENT ═════════════════════════════╣\n' },
+                    { label: 'Timestamp Break', text: '\n[2084-05-24 // 03:17:42] --------------------\n' },
+                    { label: 'Warning Break', text: '\n!!! COMPARTMENTALIZED DATA BELOW !!!\n' }
+                ]
+            },
+            {
+                category: 'ASCII Graphs / Charts',
+                items: [
+                    {
+                        label: 'Signal Bars',
+                        type: 'chart',
+                        title: 'SIGNAL ANALYSIS',
+                        content: 'SIGNAL|72\nNOISE|48\nLOCK|81'
+                    },
+                    {
+                        label: 'Status Bars',
+                        type: 'chart',
+                        title: 'SYSTEM STATUS',
+                        content: 'POWER GRID|82\nUPLINK|51\nCONTAINMENT|74'
+                    },
+                    {
+                        label: 'Tiny Plot',
+                        type: 'plot',
+                        title: 'MANA FLUX',
+                        yLabel: 'MANA FLUX',
+                        xLabel: 'SAMPLE',
+                        yMax: 8,
+                        content: '5\n7\n6\n8'
+                    },
+                    {
+                        label: 'Vertical Bar Chart',
+                        type: 'bar-plot',
+                        title: 'MANA FLUX',
+                        yLabel: 'FLUX',
+                        xLabel: 'CELL',
+                        yMax: 8,
+                        content: '01|5\n02|7\n03|6\n04|1'
+                    },
+                    {
+                        label: 'Spectrum Analyzer',
+                        type: 'spectrum',
+                        title: 'SIGNAL SPECTRUM',
+                        yLabel: 'dB',
+                        xLabel: 'FREQ',
+                        yMax: 8,
+                        content: '2 3 5 7 8 7 4 2 1 3 6 8 6 4 2'
+                    },
+                    {
+                        label: 'Telemetry Meters',
+                        type: 'meter',
+                        title: 'LIVE TELEMETRY',
+                        content: 'GATE STABILITY|44|WARN\nENTITY NOISE|79|ALERT\nDEAD-NET SYNC|63|LOCK\nCONTAINMENT|72|WARN'
+                    },
+                    {
+                        label: 'Heatmap Matrix',
+                        type: 'heatmap',
+                        title: 'CHAMBER HEATMAP',
+                        xLabel: '01 02 03 04 05',
+                        yLabel: 'A B C D',
+                        content: '1 2 2 3 1\n2 3 4 4 2\n1 3 4 3 1\n1 2 3 2 1'
+                    },
+                    {
+                        label: 'Network Route',
+                        type: 'network',
+                        title: 'NETWORK TOPOLOGY',
+                        content: 'CORE>BUS-A>LAB-01\nBUS-A>LAB-02\nCORE>ARCHIVE\nCORE>SEC>GATE>RELAY'
+                    },
+                    {
+                        label: 'EKG Trace',
+                        text: 'BIO TRACE  _____/\\/\\__________/\\/\\__________/\\/\\_____'
+                    }
+                ]
+            }
+        ];
+
         const state = {
             metadata: {},
             entries: [],
@@ -370,6 +706,7 @@ Last confirmed in Command Core during external relay failure.
 
         const els = {};
         let zipLibPromise = null;
+        let activeTemplate = null;
 
         function byId(id) {
             return document.getElementById(id);
@@ -801,6 +1138,526 @@ Last confirmed in Command Core during external relay failure.
             setStatus('Entry removed.');
         }
 
+        function insertTextAtCursor(textarea, text) {
+            if (!textarea || textarea.disabled) return;
+            const value = textarea.value || '';
+            const start = Number.isFinite(textarea.selectionStart) ? textarea.selectionStart : value.length;
+            const end = Number.isFinite(textarea.selectionEnd) ? textarea.selectionEnd : start;
+            const before = value.slice(0, start);
+            const after = value.slice(end);
+            const prefix = before && !before.endsWith('\n') ? '\n' : '';
+            const suffix = after && !after.startsWith('\n') ? '\n' : '';
+            const insertion = `${prefix}${text}${suffix}`;
+            textarea.value = `${before}${insertion}${after}`;
+            const caret = before.length + insertion.length;
+            textarea.focus();
+            textarea.setSelectionRange(caret, caret);
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        function visibleLength(value) {
+            return Array.from(String(value || '')).length;
+        }
+
+        function padVisible(value, width) {
+            const text = String(value || '');
+            return text + ' '.repeat(Math.max(0, width - visibleLength(text)));
+        }
+
+        function normalizeTemplateLines(text) {
+            const lines = String(text || '').replace(/\r/g, '').split('\n');
+            return lines.length ? lines : [''];
+        }
+
+        function frameTitleLine(title, width, glyphs) {
+            const cleanTitle = String(title || '').trim();
+            const innerWidth = width + 2;
+            if (!cleanTitle) return `${glyphs.tl}${glyphs.h.repeat(innerWidth)}${glyphs.tr}`;
+            const titleText = ` ${cleanTitle} `;
+            const prefix = glyphs.h;
+            const suffix = glyphs.h.repeat(Math.max(1, innerWidth - visibleLength(prefix) - visibleLength(titleText)));
+            return `${glyphs.tl}${prefix}${titleText}${suffix}${glyphs.tr}`;
+        }
+
+        function buildBoxTemplate(template, title, content) {
+            const glyphs = template.type === 'frame'
+                ? { tl: '╔', tr: '╗', bl: '╚', br: '╝', h: '═', v: '║' }
+                : { tl: '┌', tr: '┐', bl: '└', br: '┘', h: '─', v: '│' };
+            const lines = normalizeTemplateLines(content);
+            const contentWidth = Math.max(
+                18,
+                visibleLength(String(title || '').trim()) + 2,
+                ...lines.map(visibleLength)
+            );
+            return [
+                frameTitleLine(title, contentWidth, glyphs),
+                ...lines.map(line => `${glyphs.v} ${padVisible(line, contentWidth)} ${glyphs.v}`),
+                `${glyphs.bl}${glyphs.h.repeat(contentWidth + 2)}${glyphs.br}`
+            ].join('\n');
+        }
+
+        function buildChartTemplate(title, content) {
+            const rows = normalizeTemplateLines(content)
+                .map(line => {
+                    const [label, rawValue = '0'] = line.split('|');
+                    const value = Math.max(0, Math.min(100, Number.parseFloat(rawValue) || 0));
+                    return { label: String(label || 'VALUE').trim(), value };
+                });
+            const labelWidth = Math.max(8, ...rows.map(row => visibleLength(row.label)));
+            const chartLines = rows.map(row => {
+                const filled = Math.round(row.value / 10);
+                return `${padVisible(row.label.toUpperCase(), labelWidth)} [${'█'.repeat(filled)}${'░'.repeat(10 - filled)}] ${String(Math.round(row.value)).padStart(3, ' ')}%`;
+            });
+            return buildBoxTemplate({ type: 'frame' }, title || 'STATUS CHART', chartLines.join('\n'));
+        }
+
+        function buildPlotTemplate(title, content) {
+            const values = normalizeTemplateLines(content)
+                .map(line => Math.max(0, Math.min(8, Number.parseFloat(line) || 0)));
+            const max = Math.max(8, ...values, 1);
+            const rows = [];
+            for (let level = max; level >= 1; level--) {
+                rows.push(`${String(level).padStart(2, '0')} │ ${values.map(value => value >= level ? '█' : ' ').join('   ')}`);
+            }
+            rows.push(`   └${'─'.repeat(Math.max(10, values.length * 4))}`);
+            rows.push(`    ${values.map((_, index) => String(index + 1).padStart(2, '0')).join('  ')}`);
+            return [String(title || 'ASCII PLOT').toUpperCase(), ...rows].join('\n');
+        }
+
+        function parseAxisMax(value, fallback = 8) {
+            const number = Math.round(Number.parseFloat(value));
+            return Math.max(1, Math.min(99, Number.isFinite(number) ? number : fallback));
+        }
+
+        function splitTemplateValues(content) {
+            return String(content || '')
+                .replace(/,/g, ' ')
+                .split(/\s+/)
+                .map(value => Number.parseFloat(value))
+                .filter(Number.isFinite);
+        }
+
+        function updateTemplateRawData(lines) {
+            const bodyInput = byId('templateEditContent');
+            if (!bodyInput) return;
+            bodyInput.value = lines.join('\n');
+            updateTemplateEditorPreview();
+        }
+
+        function makeTemplateControlRow(labelText, value, min, max, step, onChange) {
+            const row = document.createElement('div');
+            row.className = 'template-control-row';
+
+            const label = document.createElement('div');
+            label.className = 'template-control-label';
+            label.textContent = labelText;
+            label.title = labelText;
+
+            const slider = document.createElement('input');
+            slider.type = 'range';
+            slider.min = String(min);
+            slider.max = String(max);
+            slider.step = String(step);
+            slider.value = String(value);
+
+            const number = document.createElement('input');
+            number.type = 'number';
+            number.min = String(min);
+            number.max = String(max);
+            number.step = String(step);
+            number.value = String(value);
+
+            const commit = rawValue => {
+                const next = Math.max(min, Math.min(max, Number.parseFloat(rawValue) || 0));
+                slider.value = String(next);
+                number.value = String(next);
+                onChange(next);
+            };
+            slider.addEventListener('input', () => commit(slider.value));
+            number.addEventListener('input', () => commit(number.value));
+
+            row.append(label, slider, number);
+            return row;
+        }
+
+        function parseLabeledNumericRows(content, fallbackPrefix = 'ROW') {
+            return normalizeTemplateLines(content).map((line, index) => {
+                const parts = line.includes('|') ? line.split('|') : [`${fallbackPrefix}-${index + 1}`, line];
+                return {
+                    label: String(parts[0] || `${fallbackPrefix}-${index + 1}`).trim(),
+                    value: Number.parseFloat(parts[1]) || 0,
+                    extra: parts.slice(2).join('|')
+                };
+            });
+        }
+
+        function renderBarPlotControls(host, content) {
+            const yMax = parseAxisMax(templateOptionValue('YMax', activeTemplate?.yMax || 8), 8);
+            const rows = parseLabeledNumericRows(content, 'BAR');
+            rows.forEach((row, index) => {
+                host.appendChild(makeTemplateControlRow(row.label || `BAR ${index + 1}`, row.value, 0, yMax, 1, next => {
+                    rows[index].value = next;
+                    updateTemplateRawData(rows.map(item => `${item.label}|${item.value}`));
+                    renderTemplateValueControls();
+                }));
+            });
+        }
+
+        function renderChartControls(host, content) {
+            const rows = parseLabeledNumericRows(content, 'METER');
+            rows.forEach((row, index) => {
+                host.appendChild(makeTemplateControlRow(row.label || `METER ${index + 1}`, row.value, 0, 100, 1, next => {
+                    rows[index].value = next;
+                    updateTemplateRawData(rows.map(item => `${item.label}|${item.value}${item.extra ? `|${item.extra}` : ''}`));
+                    renderTemplateValueControls();
+                }));
+            });
+        }
+
+        function renderSpectrumControls(host, content) {
+            const yMax = parseAxisMax(templateOptionValue('YMax', activeTemplate?.yMax || 8), 8);
+            const values = splitTemplateValues(content);
+            values.forEach((value, index) => {
+                host.appendChild(makeTemplateControlRow(`BAND ${String(index + 1).padStart(2, '0')}`, value, 0, yMax, 1, next => {
+                    values[index] = next;
+                    updateTemplateRawData([values.join(' ')]);
+                    renderTemplateValueControls();
+                }));
+            });
+        }
+
+        function renderHeatmapControls(host, content) {
+            const rows = normalizeTemplateLines(content).map(line => line.trim().split(/\s+/).map(value => Math.max(1, Math.min(4, Number.parseInt(value, 10) || 1))));
+            rows.forEach((rowValues, rowIndex) => {
+                rowValues.forEach((value, colIndex) => {
+                    host.appendChild(makeTemplateControlRow(`R${rowIndex + 1} C${colIndex + 1}`, value, 1, 4, 1, next => {
+                        rows[rowIndex][colIndex] = next;
+                        updateTemplateRawData(rows.map(row => row.join(' ')));
+                        renderTemplateValueControls();
+                    }));
+                });
+            });
+        }
+
+        function renderTemplateValueControls() {
+            const host = byId('templateValueControls');
+            const bodyInput = byId('templateEditContent');
+            if (!host || !bodyInput || !activeTemplate) return;
+            host.textContent = '';
+            const supported = ['chart', 'bar-plot', 'spectrum', 'meter', 'heatmap'].includes(activeTemplate.type);
+            host.classList.toggle('hidden', !supported);
+            if (!supported) return;
+
+            const title = document.createElement('div');
+            title.className = 'template-title';
+            title.textContent = 'Value Controls';
+            host.appendChild(title);
+
+            if (activeTemplate.type === 'chart' || activeTemplate.type === 'meter') renderChartControls(host, bodyInput.value);
+            else if (activeTemplate.type === 'bar-plot') renderBarPlotControls(host, bodyInput.value);
+            else if (activeTemplate.type === 'spectrum') renderSpectrumControls(host, bodyInput.value);
+            else if (activeTemplate.type === 'heatmap') renderHeatmapControls(host, bodyInput.value);
+        }
+
+        function templateOptionValue(key, fallback = '') {
+            const input = byId(`templateEdit${key}`);
+            return input ? input.value : fallback;
+        }
+
+        function buildVerticalBarPlotTemplate(title, content, options = {}) {
+            const yMax = parseAxisMax(options.yMax, 8);
+            const rowsIn = normalizeTemplateLines(content)
+                .map((line, index) => {
+                    const parts = line.includes('|') ? line.split('|') : [String(index + 1).padStart(2, '0'), line];
+                    return {
+                        label: String(parts[0] || index + 1).trim().slice(0, 4),
+                        value: Math.max(0, Math.min(yMax, Number.parseFloat(parts[1]) || 0))
+                    };
+                });
+            const rows = [String(title || options.yLabel || 'BAR CHART').toUpperCase()];
+            for (let level = yMax; level >= 1; level--) {
+                rows.push(`${String(level).padStart(2, '0')} │ ${rowsIn.map(row => row.value >= level ? '█' : ' ').join('   ')}`);
+            }
+            rows.push(`   └${'─'.repeat(Math.max(10, rowsIn.length * 4))}`);
+            rows.push(`    ${rowsIn.map(row => padVisible(row.label, 2)).join('  ')}`);
+            if (options.xLabel) rows.push(`X: ${options.xLabel}`);
+            if (options.yLabel) rows.push(`Y: ${options.yLabel}`);
+            return rows.join('\n');
+        }
+
+        function buildSpectrumTemplate(title, content, options = {}) {
+            const yMax = parseAxisMax(options.yMax, 8);
+            const values = splitTemplateValues(content).map(value => Math.max(0, Math.min(yMax, value)));
+            const blocks = '▁▂▃▄▅▆▇█';
+            const signal = values.map(value => blocks[Math.max(0, Math.min(7, Math.round((value / yMax) * 7)))]).join('');
+            return [
+                String(title || 'SIGNAL SPECTRUM').toUpperCase(),
+                `${padVisible(options.yLabel || 'LEVEL', 10)} ${signal}`,
+                `${padVisible(options.xLabel || 'FREQ', 10)} ${'─'.repeat(Math.max(8, values.length))}`,
+                `${padVisible('PEAK', 10)} ${Math.max(0, ...values).toFixed(1)} / ${yMax}`
+            ].join('\n');
+        }
+
+        function buildMeterTemplate(title, content) {
+            const rows = normalizeTemplateLines(content).map(line => {
+                const [label = 'VALUE', rawValue = '0', state = ''] = line.split('|');
+                const value = Math.max(0, Math.min(100, Number.parseFloat(rawValue) || 0));
+                const filled = Math.round(value / 10);
+                return `${padVisible(label.toUpperCase(), 16)} [${'█'.repeat(filled)}${'░'.repeat(10 - filled)}] ${String(Math.round(value)).padStart(3, ' ')}% ${state.trim().toUpperCase()}`;
+            });
+            return buildBoxTemplate({ type: 'frame' }, title || 'LIVE TELEMETRY', rows.join('\n'));
+        }
+
+        function buildHeatmapTemplate(title, content, options = {}) {
+            const density = ['░░', '▒▒', '▓▓', '██'];
+            const rows = normalizeTemplateLines(content).map((line, index) => {
+                const yLabels = String(options.yLabel || '').split(/\s+/).filter(Boolean);
+                const label = (yLabels[index] || String.fromCharCode(65 + index)).padEnd(2, ' ');
+                const cells = line.trim().split(/\s+/).map(raw => {
+                    const value = Math.max(1, Math.min(4, Math.round(Number.parseFloat(raw) || 1)));
+                    return density[value - 1];
+                });
+                return `${label} ${cells.join(' ')}`;
+            });
+            const header = options.xLabel ? `   ${options.xLabel}` : '';
+            return buildBoxTemplate({ type: 'frame' }, title || 'HEATMAP', [header, ...rows].filter(Boolean).join('\n'));
+        }
+
+        function buildNetworkTemplate(title, content) {
+            const rows = normalizeTemplateLines(content).map(line => {
+                const nodes = line.split(/\s*>\s*/).map(node => node.trim()).filter(Boolean);
+                return nodes.map(node => `[${node}]`).join('──');
+            });
+            return buildBoxTemplate({ type: 'frame' }, title || 'NETWORK TOPOLOGY', rows.join('\n'));
+        }
+
+        function buildTemplateOutput(template, title, content) {
+            if (template.type === 'frame' || template.type === 'box') return buildBoxTemplate(template, title, content);
+            if (template.type === 'chart') return buildChartTemplate(title, content);
+            if (template.type === 'plot') return buildPlotTemplate(title, content);
+            if (template.type === 'bar-plot') {
+                return buildVerticalBarPlotTemplate(title, content, {
+                    xLabel: templateOptionValue('XLabel', template.xLabel || ''),
+                    yLabel: templateOptionValue('YLabel', template.yLabel || ''),
+                    yMax: templateOptionValue('YMax', template.yMax || 8)
+                });
+            }
+            if (template.type === 'spectrum') {
+                return buildSpectrumTemplate(title, content, {
+                    xLabel: templateOptionValue('XLabel', template.xLabel || ''),
+                    yLabel: templateOptionValue('YLabel', template.yLabel || ''),
+                    yMax: templateOptionValue('YMax', template.yMax || 8)
+                });
+            }
+            if (template.type === 'meter') return buildMeterTemplate(title, content);
+            if (template.type === 'heatmap') {
+                return buildHeatmapTemplate(title, content, {
+                    xLabel: templateOptionValue('XLabel', template.xLabel || ''),
+                    yLabel: templateOptionValue('YLabel', template.yLabel || '')
+                });
+            }
+            if (template.type === 'network') return buildNetworkTemplate(title, content);
+            return content;
+        }
+
+        function insertTemplateOutput(text, label) {
+            if (!currentEntry()) {
+                setStatus('Create or select an entry before inserting a template.', 'warn');
+                return;
+            }
+            insertTextAtCursor(els.entryBody, text);
+            syncEntryFromForm();
+            renderPreview();
+            setStatus(`Inserted template: ${label}`);
+            closeTemplatePopup();
+        }
+
+        function insertMessageTemplate(template) {
+            insertTemplateOutput(template.text || '', template.label);
+        }
+
+        function openTemplatePopup() {
+            const overlay = els.templatePopupOverlay;
+            if (!overlay) return;
+            overlay.classList.remove('hidden');
+            overlay.setAttribute('aria-hidden', 'false');
+            showTemplatePalette();
+            const firstButton = overlay.querySelector('.template-btn');
+            if (firstButton) firstButton.focus();
+        }
+
+        function closeTemplatePopup() {
+            const overlay = els.templatePopupOverlay;
+            if (!overlay || overlay.classList.contains('hidden')) return;
+            overlay.classList.add('hidden');
+            overlay.setAttribute('aria-hidden', 'true');
+            activeTemplate = null;
+            const trigger = byId('openTemplatePopupBtn');
+            if (trigger) trigger.focus();
+        }
+
+        function showTemplatePalette() {
+            activeTemplate = null;
+            const palette = byId('templatePalette');
+            const editor = byId('templateEditor');
+            const title = byId('templatePopupTitle');
+            const hint = byId('templatePopupHint');
+            if (palette) palette.classList.remove('hidden');
+            if (editor) {
+                editor.classList.add('hidden');
+                editor.textContent = '';
+            }
+            if (title) title.textContent = 'Message Content Templates';
+            if (hint) hint.textContent = 'Choose a template, edit its content, then insert it into the Body text.';
+        }
+
+        function updateTemplateEditorPreview() {
+            if (!activeTemplate) return;
+            const titleInput = byId('templateEditTitle');
+            const bodyInput = byId('templateEditContent');
+            const preview = byId('templateEditPreview');
+            if (!bodyInput || !preview) return;
+            preview.textContent = buildTemplateOutput(activeTemplate, titleInput?.value || '', bodyInput.value || '');
+        }
+
+        function handleTemplateRawDataInput() {
+            updateTemplateEditorPreview();
+            renderTemplateValueControls();
+        }
+
+        function openTemplateEditor(template) {
+            activeTemplate = template;
+            const palette = byId('templatePalette');
+            const editor = byId('templateEditor');
+            const title = byId('templatePopupTitle');
+            const hint = byId('templatePopupHint');
+            if (!editor) return;
+
+            if (palette) palette.classList.add('hidden');
+            if (editor) editor.classList.remove('hidden');
+            if (title) title.textContent = `Template Editor // ${template.label}`;
+            if (hint) hint.textContent = 'Edit the source text below. Frames, boxes, and charts rebuild automatically to fit the content.';
+
+            const editableTypes = new Set(['frame', 'box', 'chart', 'plot', 'bar-plot', 'spectrum', 'meter', 'heatmap', 'network']);
+            const editable = editableTypes.has(template.type);
+            editor.textContent = '';
+
+            if (!editable) {
+                insertMessageTemplate(template);
+                return;
+            }
+
+            const titleLabel = document.createElement('label');
+            titleLabel.textContent = ['chart', 'plot', 'bar-plot', 'spectrum', 'meter', 'heatmap', 'network'].includes(template.type) ? 'Graph title' : 'Frame title';
+            const titleInput = document.createElement('input');
+            titleInput.id = 'templateEditTitle';
+            titleInput.type = 'text';
+            titleInput.value = template.title || template.label || '';
+            titleLabel.appendChild(titleInput);
+
+            const optionFields = document.createElement('div');
+            optionFields.className = 'field-grid';
+            const addOption = (id, labelText, value) => {
+                const label = document.createElement('label');
+                label.textContent = labelText;
+                const input = document.createElement('input');
+                input.id = `templateEdit${id}`;
+                input.type = id === 'YMax' ? 'number' : 'text';
+                input.value = value || '';
+                input.addEventListener('input', () => {
+                    updateTemplateEditorPreview();
+                    renderTemplateValueControls();
+                });
+                label.appendChild(input);
+                optionFields.appendChild(label);
+            };
+            if (['bar-plot', 'spectrum', 'heatmap'].includes(template.type)) {
+                addOption('XLabel', 'X axis / column labels', template.xLabel || '');
+                addOption('YLabel', 'Y axis / row labels', template.yLabel || '');
+            }
+            if (['bar-plot', 'spectrum'].includes(template.type)) {
+                addOption('YMax', 'Y axis max', template.yMax || 8);
+            }
+
+            const bodyLabel = document.createElement('label');
+            const bodyHelp = {
+                chart: 'Rows, one per line: LABEL|PERCENT',
+                plot: 'Values, one number per line from 0 to 8',
+                'bar-plot': 'Bars, one per line: X_LABEL|VALUE',
+                spectrum: 'Signal values separated by spaces, commas, or lines',
+                meter: 'Meters, one per line: LABEL|PERCENT|STATUS',
+                heatmap: 'Matrix rows. Use numbers 1-4 separated by spaces',
+                network: 'Routes, one per line. Use NODE>NODE>NODE'
+            };
+            bodyLabel.textContent = bodyHelp[template.type] || 'Frame content, one line per row';
+            const bodyInput = document.createElement('textarea');
+            bodyInput.id = 'templateEditContent';
+            bodyInput.value = template.content || template.text || '';
+            bodyLabel.appendChild(bodyInput);
+
+            const valueControls = document.createElement('div');
+            valueControls.id = 'templateValueControls';
+            valueControls.className = 'template-value-controls hidden';
+
+            const previewLabel = document.createElement('div');
+            previewLabel.className = 'template-title';
+            previewLabel.textContent = 'Preview';
+            const preview = document.createElement('pre');
+            preview.id = 'templateEditPreview';
+            preview.className = 'template-preview';
+
+            const actions = document.createElement('div');
+            actions.className = 'template-editor-actions';
+            const insert = document.createElement('button');
+            insert.type = 'button';
+            insert.textContent = '[ INSERT TEMPLATE ]';
+            insert.addEventListener('click', () => {
+                insertTemplateOutput(buildTemplateOutput(activeTemplate, titleInput.value, bodyInput.value), activeTemplate.label);
+            });
+            const back = document.createElement('button');
+            back.type = 'button';
+            back.textContent = '[ BACK ]';
+            back.addEventListener('click', showTemplatePalette);
+            actions.append(insert, back);
+
+            titleInput.addEventListener('input', updateTemplateEditorPreview);
+            bodyInput.addEventListener('input', handleTemplateRawDataInput);
+            editor.append(titleLabel);
+            if (optionFields.childNodes.length) editor.appendChild(optionFields);
+            editor.append(bodyLabel, valueControls, previewLabel, preview, actions);
+            updateTemplateEditorPreview();
+            renderTemplateValueControls();
+            bodyInput.focus();
+        }
+
+        function renderTemplatePalette() {
+            const host = byId('templatePalette');
+            if (!host) return;
+            host.textContent = '';
+            MESSAGE_TEMPLATES.forEach(group => {
+                const groupEl = document.createElement('section');
+                groupEl.className = 'template-group';
+
+                const title = document.createElement('div');
+                title.className = 'template-title';
+                title.textContent = group.category;
+
+                const buttons = document.createElement('div');
+                buttons.className = 'template-buttons';
+                group.items.forEach(template => {
+                    const button = document.createElement('button');
+                    button.className = 'template-btn';
+                    button.type = 'button';
+                    button.textContent = template.label;
+                    button.addEventListener('click', () => openTemplateEditor(template));
+                    buttons.appendChild(button);
+                });
+
+                groupEl.append(title, buttons);
+                host.appendChild(groupEl);
+            });
+        }
+
         function renderPreview() {
             syncMetadataFromForm();
             syncEntryFromForm();
@@ -1058,7 +1915,7 @@ Last confirmed in Command Core during external relay failure.
         function init() {
             ['status', 'fileInput', 'sourceList', 'metaId', 'metaTitle', 'metaDescription', 'metaPassword',
                 'entryList', 'entryId', 'entryTitle', 'entryCategory', 'entryClearance', 'entryTags',
-                'entryRelated', 'entryRedacted', 'entryBody', 'categoryList', 'preview'].forEach(id => {
+                'entryRelated', 'entryRedacted', 'entryBody', 'categoryList', 'preview', 'templatePopupOverlay'].forEach(id => {
                 els[id] = byId(id);
             });
 
@@ -1071,12 +1928,21 @@ Last confirmed in Command Core during external relay failure.
             byId('downloadZipBtn').addEventListener('click', downloadZipPackage);
             byId('downloadDatBtn').addEventListener('click', downloadEncryptedDat);
             byId('saveLocalBtn').addEventListener('click', saveLocalFile);
+            byId('openTemplatePopupBtn').addEventListener('click', openTemplatePopup);
+            byId('templatePopupCloseBtn').addEventListener('click', closeTemplatePopup);
+            els.templatePopupOverlay.addEventListener('click', event => {
+                if (event.target === els.templatePopupOverlay) closeTemplatePopup();
+            });
+            document.addEventListener('keydown', event => {
+                if (event.key === 'Escape') closeTemplatePopup();
+            });
             els.fileInput.addEventListener('change', event => {
                 const file = event.target.files && event.target.files[0];
                 if (file) openLocalFile(file);
                 event.target.value = '';
             });
             if (window.showSaveFilePicker) byId('saveLocalBtn').classList.remove('hidden');
+            renderTemplatePalette();
             bindLiveUpdates();
             loadManifest();
         }
