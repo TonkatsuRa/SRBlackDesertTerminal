@@ -1247,6 +1247,52 @@ function handleStatusCommand(args) {
     }
 }
 
+const SECRET_EDITOR_PAGES = {
+    database: {
+        label: 'DATABASE EDITOR',
+        path: 'database-editor.html'
+    },
+    diagnostics: {
+        label: 'DIAGNOSTICS EDITOR',
+        path: 'diagnostics-editor.html'
+    }
+};
+
+async function openSecretEditorPage(kind) {
+    const page = SECRET_EDITOR_PAGES[kind];
+    if (!page) return;
+
+    const navigate = () => {
+        window.location.href = page.path;
+    };
+
+    AudioEngine.menuSelect();
+    print('');
+    print(`EDITOR ACCESS GRANTED: ${page.label}`, 't-amber');
+    print(`Resolving module: ${page.path}`, 't-dim');
+
+    if (window.location.protocol === 'file:') {
+        print('Local file mode detected. Opening editor directly...', 't-dim');
+        print('');
+        setTimeout(navigate, 250);
+        return;
+    }
+
+    try {
+        const response = await fetch(page.path, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        print('Editor module found. Opening...', 't-cyan');
+        print('');
+        setTimeout(navigate, 250);
+    } catch (error) {
+        AudioEngine.errorBuzz();
+        print('EDITOR MODULE NOT FOUND', 't-red');
+        print(`Missing file: ${page.path}`, 't-dim');
+        print('Upload the editor HTML file at the GitHub Pages root, or keep it local-only.', 't-dim');
+        print('');
+    }
+}
+
 function registerTerminalCommands() {
     if (commandsRegistered) return;
     commandsRegistered = true;
@@ -1446,6 +1492,24 @@ function registerTerminalCommands() {
         usage: 'SAFE MODE | SAFE MODE OFF',
         description: 'Force a session-only low-effects stability profile.',
         run: ctx => handleSafeModeCommand(ctx.args)
+    });
+    registerCommand({
+        name: 'database editor',
+        aliases: ['db editor', 'editor database', 'open database editor', 'ares database editor'],
+        usage: 'DATABASE EDITOR',
+        description: 'Open the local database editor page.',
+        adminRequired: true,
+        hidden: true,
+        run: () => openSecretEditorPage('database')
+    });
+    registerCommand({
+        name: 'diagnostics editor',
+        aliases: ['diagnostic editor', 'diag editor', 'editor diagnostics', 'open diagnostics editor', 'ares diagnostics editor'],
+        usage: 'DIAGNOSTICS EDITOR',
+        description: 'Open the local diagnostics editor page.',
+        adminRequired: true,
+        hidden: true,
+        run: () => openSecretEditorPage('diagnostics')
     });
     registerCommand({ name: 'kontol', hidden: true, run: () => startMiniGame() });
     registerCommand({ name: 'derfette', hidden: true, run: () => startCasinoGame() });
