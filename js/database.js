@@ -663,6 +663,81 @@ function ejectAllDatabases() {
 // ========================================
 // FILE HANDLING
 // ========================================
+// Internal ZIP transport key. This is spoiler-friction obfuscation for a static site,
+// not real secrecy against a player who inspects the JavaScript source.
+const DATABASE_ZIP_KEY_HEX_PARTS = ['5368656c', '62795368', '656c6279', '313233'];
+
+function databaseZipPassword() {
+    return DATABASE_ZIP_KEY_HEX_PARTS
+        .map(part => String(part || '').match(/../g) || [])
+        .flat()
+        .map(hex => String.fromCharCode(Number.parseInt(hex, 16)))
+        .join('');
+}
+
+function isZipDatabasePackage(fileName = '') {
+    return String(fileName).toLowerCase().endsWith('.zip');
+}
+
+function zipEntryName(entry = {}) {
+    return String(entry.filename || entry.name || '').replace(/\\/g, '/');
+}
+
+function normalizeZipEntryName(name = '') {
+    return zipEntryName({ filename: name })
+        .replace(/^\.\//, '')
+        .toLowerCase();
+}
+
+function selectZipDatabaseEntry(entries = [], preferredName = '') {
+    const files = entries.filter(entry => !entry.directory && zipEntryName(entry));
+    const preferred = normalizeZipEntryName(preferredName);
+    if (preferred) {
+        const match = files.find(entry => {
+            const name = normalizeZipEntryName(zipEntryName(entry));
+            return name === preferred || name.endsWith(`/${preferred}`);
+        });
+        if (match) return match;
+    }
+    return files.find(entry => /\.(md|markdown|txt)$/i.test(zipEntryName(entry))) || null;
+}
+
+async function ensureZipDatabaseSupport() {
+    await loadScriptOnce('zip');
+    if (!window.zip?.ZipReader || !window.zip?.BlobReader || !window.zip?.TextWriter) {
+        throw new Error('ZIP_SUPPORT_UNAVAILABLE');
+    }
+    return window.zip;
+}
+
+async function fetchBlobFile(path) {
+    const response = await fetch(path, { cache: 'no-store' });
+    if (!response.ok) throw new Error(`${path} HTTP ${response.status}`);
+    return response.blob();
+}
+
+async function readZipDatabasePackage(blob, item = {}, sourceName = 'database.zip') {
+    const zipLib = await ensureZipDatabaseSupport();
+    const reader = new zipLib.ZipReader(new zipLib.BlobReader(blob), { useWebWorkers: false });
+    try {
+        const entries = await reader.getEntries();
+        const entry = selectZipDatabaseEntry(entries, item.innerFile || item.entry || item.databaseFile);
+        if (!entry) throw new Error('ZIP_DATABASE_ENTRY_NOT_FOUND');
+        const content = await entry.getData(new zipLib.TextWriter(), {
+            password: databaseZipPassword(),
+            useWebWorkers: false
+        });
+        const entryName = zipEntryName(entry);
+        return {
+            content,
+            entryName,
+            source: `${sourceName}:${entryName}`
+        };
+    } finally {
+        await reader.close();
+    }
+}
+
 function handleFileSelect(e) {
     const file = e.target.files[0];
     if (!file) {
@@ -680,13 +755,15 @@ function handleFileSelect(e) {
     const fileName = file.name.toLowerCase();
     if (fileName.endsWith('.md') || fileName.endsWith('.markdown') || fileName.endsWith('.txt')) {
         loadPlainDatabaseFile(file);
+    } else if (isZipDatabasePackage(fileName)) {
+        loadZipDatabaseFile(file);
     } else if (fileName.endsWith('.dat') || fileName.endsWith('.db') || fileName.endsWith('.bin')) {
         loadEncryptedFile(file);
     } else {
         AudioEngine.errorBuzz();
         print('');
         print('ERROR: Unsupported file format.', 't-red');
-        print('Expected: .md, .txt, or encrypted database (.dat)', 't-dim');
+        print('Expected: .md, .txt, .zip, or encrypted database (.dat)', 't-dim');
         print('');
     }
     e.target.value = '';
@@ -729,6 +806,36 @@ function loadPlainDatabaseFile(file) {
         print('');
     };
     reader.readAsText(file);
+}
+
+async function loadZipDatabaseFile(file) {
+    print('');
+    print('ZIP DATABASE PACKAGE DETECTED', 't-amber');
+    print(`Reading: ${file.name}`, 't-dim');
+    print('Opening sealed transport package...', 't-dim');
+    AudioEngine.decryptSound();
+
+    try {
+        const item = pendingLocalDatabaseItem || { file: file.name, displayName: file.name };
+        const extracted = await readZipDatabasePackage(file, item, file.name);
+        const markdownDatabase = parseMarkdownDatabase(extracted.content, extracted.entryName || file.name);
+        if (markdownDatabase.entries.length) {
+            promptForParsedDatabase(markdownDatabase, item, extracted.source || file.name);
+            return;
+        }
+
+        const legacyDatabase = parseLegacyDatabase(extracted.content, extracted.entryName || file.name);
+        if (!legacyDatabase.entries.length) throw new Error('No entries found');
+        mountParsedDatabase(legacyDatabase, item, extracted.source || file.name);
+    } catch (error) {
+        AudioEngine.errorBuzz();
+        print('');
+        print('ERROR: ZIP DATABASE DECRYPTION FAILED', 't-red');
+        print('Package key is invalid, ZIP support is unavailable, or no readable database file was found inside.', 't-dim');
+        print('');
+    } finally {
+        pendingLocalDatabaseItem = null;
+    }
 }
 
 function decodeEncryptedPayload(encoded) {
@@ -874,7 +981,7 @@ function renderDatabaseSelectorList(body, manifest) {
     if (databaseManifestSource === 'fallback') {
         const warning = document.createElement('p');
         warning.className = 'database-modal-copy t-amber';
-        warning.textContent = 'Manifest fetch is blocked or unavailable. Showing the default database list. If you opened index.html directly, the next step may ask you to select the matching local .md file manually.';
+        warning.textContent = 'Manifest fetch is blocked or unavailable. Showing the default database list. If you opened index.html directly, the next step may ask you to select the matching local database package manually.';
         body.appendChild(warning);
     }
 
@@ -909,7 +1016,7 @@ function renderDatabaseSelectorList(body, manifest) {
     externalName.textContent = 'ADD EXTERNAL DATABASE FILE';
     const externalDescription = document.createElement('span');
     externalDescription.className = 'database-choice-description';
-    externalDescription.textContent = 'Open local file picker for .md, .txt, or encrypted .dat database packages.';
+    externalDescription.textContent = 'Open local file picker for .md, .txt, .zip, or encrypted .dat database packages.';
     external.append(externalName, externalDescription);
     external.addEventListener('click', () => {
         if (databaseCapacityFull()) {
@@ -949,10 +1056,23 @@ async function prepareManifestDatabase(item) {
     body.textContent = 'Fetching database package...';
     try {
         const path = `databases/${item.file || item.filename}`;
-        const content = await fetchTextFile(path);
-        const parsed = parseMarkdownDatabase(content, item.displayName || item.name || item.file);
+        const sourceName = item.displayName || item.name || item.file;
+        let content = '';
+        let source = path;
+
+        if (item.format === 'zip' || isZipDatabasePackage(item.file || item.filename)) {
+            body.textContent = 'Fetching sealed ZIP database package...';
+            const blob = await fetchBlobFile(path);
+            const extracted = await readZipDatabasePackage(blob, item, path);
+            content = extracted.content;
+            source = extracted.source;
+        } else {
+            content = await fetchTextFile(path);
+        }
+
+        const parsed = parseMarkdownDatabase(content, sourceName);
         if (!parsed.entries.length) throw new Error('No entries found');
-        promptForParsedDatabase(parsed, item, path);
+        promptForParsedDatabase(parsed, item, source);
     } catch (error) {
         renderLocalDatabasePrompt(item);
         AudioEngine.errorBuzz();
@@ -1030,7 +1150,7 @@ function renderLocalDatabasePrompt(item = {}) {
     const fileName = item.file || item.filename || 'database.md';
     const message = document.createElement('p');
     message.className = 'database-modal-copy t-amber';
-        message.textContent = `${contentGet('errors.database_package_fail', 'DATABASE PACKAGE FAILED TO LOAD.')} The browser could not fetch databases/${fileName}. On GitHub Pages, make sure the root .nojekyll file is uploaded so Markdown databases are served as raw files. If you opened the page directly from disk, select that file manually from the databases folder.`;
+        message.textContent = `${contentGet('errors.database_package_fail', 'DATABASE PACKAGE FAILED TO LOAD.')} The browser could not fetch databases/${fileName}. On GitHub Pages, make sure the root .nojekyll file is uploaded so database packages are served as raw files. If you opened the page directly from disk, select that file manually from the databases folder.`;
     const select = document.createElement('button');
     select.className = 'database-modal-action';
     select.type = 'button';

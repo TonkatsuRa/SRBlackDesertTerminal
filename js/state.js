@@ -18,7 +18,8 @@ const TYPEWRITER_CONFIG = {
 const EFFECTS_STORAGE_KEY = 'aresEffectsMode.v1';
 const EFFECTS_MODES = new Set(['auto', 'full', 'low']);
 const CDN_SCRIPTS = {
-    fuse: 'https://cdn.jsdelivr.net/npm/fuse.js@7.2.0/dist/fuse.min.js'
+    fuse: 'https://cdn.jsdelivr.net/npm/fuse.js@7.2.0/dist/fuse.min.js',
+    zip: 'https://cdn.jsdelivr.net/npm/@zip.js/zip.js@2.8.26/dist/zip-full.min.js'
 };
 const lazyScriptPromises = new Map();
 let effectsMode = 'auto';
@@ -424,11 +425,13 @@ function updateSafeModeIndicator() {
 function configureLibrarySupport() {
     const root = document.documentElement;
     root.classList.toggle('has-fuse', typeof window.Fuse === 'function');
+    root.classList.toggle('has-zip', Boolean(window.zip?.ZipReader));
 }
 
 function loadScriptOnce(key, url = CDN_SCRIPTS[key]) {
     if (!url) return Promise.reject(new Error(`Unknown script: ${key}`));
     if (key === 'fuse' && typeof window.Fuse === 'function') return Promise.resolve();
+    if (key === 'zip' && window.zip?.ZipReader) return Promise.resolve();
     if (lazyScriptPromises.has(key)) return lazyScriptPromises.get(key);
 
     const promise = new Promise((resolve, reject) => {
