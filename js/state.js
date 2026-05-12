@@ -218,7 +218,13 @@ const EffectsController = {
         }
         syncLowPowerMode();
         updateEffectsStatus();
-        if (facilityActive) renderFacilityStatus(performance.now());
+        if (facilityActive) {
+            if (window.MapOverlayController?.isActive()) {
+                window.MapOverlayController.refreshProfile();
+            } else {
+                renderFacilityStatus(performance.now());
+            }
+        }
     }
 };
 

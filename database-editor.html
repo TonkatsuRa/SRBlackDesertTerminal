@@ -334,6 +334,35 @@
             white-space: nowrap;
         }
 
+        .template-fieldset {
+            display: grid;
+            gap: 10px;
+            border: 1px solid rgba(32, 194, 14, 0.18);
+            background: rgba(0, 8, 3, 0.36);
+            padding: 10px;
+        }
+
+        .template-fieldset-title {
+            color: var(--amber);
+            font-size: 0.78rem;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        .template-check {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            color: var(--text);
+            text-transform: none;
+            letter-spacing: normal;
+        }
+
+        .template-check input {
+            width: auto;
+            accent-color: var(--amber);
+        }
+
         .danger {
             border-color: rgba(255, 75, 75, 0.52);
             color: var(--red);
@@ -519,7 +548,8 @@ Facility Director assigned by Ares Macrotechnology Special Projects.
 Last confirmed in Command Core during external relay failure.
 `;
 
-        const MESSAGE_TEMPLATES = [
+        // Kept temporarily for rollback/reference. The active popup uses the schema-driven MESSAGE_TEMPLATES below.
+        const LEGACY_MESSAGE_TEMPLATES = [
             {
                 category: 'ASCII Art',
                 items: [
@@ -696,6 +726,75 @@ Last confirmed in Command Core during external relay failure.
                 ]
             }
         ];
+
+        const TEMPLATE_FIELDSETS = {
+            titleRows: [
+                { id: 'title', label: 'Panel title', type: 'text' },
+                { id: 'rows', label: 'Rows', type: 'textarea' }
+            ],
+            titleValues: [
+                { id: 'title', label: 'Panel title', type: 'text' },
+                { id: 'values', label: 'Values', type: 'textarea' },
+                { id: 'yMax', label: 'Y axis max', type: 'range', min: 4, max: 16, step: 1 }
+            ],
+            titleMatrix: [
+                { id: 'title', label: 'Panel title', type: 'text' },
+                { id: 'matrix', label: 'Matrix values', type: 'textarea' }
+            ]
+        };
+
+        // Schema-driven telemetry templates. Generated output remains static plain text for terminal safety.
+        const MESSAGE_TEMPLATES = [
+            { id: 'event-log', group: 'Logs', label: 'Event Log', generator: 'event-log', supportsPreviewAnimation: true, control: 'log-rows', data: { title: 'LIVE EVENT LOG', rows: '03:17:10|SYS|OK|Gate stabilization field nominal.\n03:17:12|NET|LOCK|Uplink sync to Dead-Net carrier.\n03:17:14|BIO|INFO|Subject ECHO-7 vitals elevated.\n03:17:18|ANOM|ALERT|Signal spike detected at depth 312m.' }, fields: TEMPLATE_FIELDSETS.titleRows },
+            { id: 'alarm-summary', group: 'Logs', label: 'Alarm Summary', generator: 'alarm-summary', supportsPreviewAnimation: false, control: 'log-rows', data: { title: 'ALARM SUMMARY', rows: 'A-104|WARN|Containment pressure drift|ACK PENDING\nB-019|INFO|Archive relay latency|MONITOR\nC-772|ALERT|Unclassified entity noise|ESCALATE' }, fields: TEMPLATE_FIELDSETS.titleRows },
+            { id: 'active-processes', group: 'Logs', label: 'Active Processes', generator: 'active-processes', supportsPreviewAnimation: true, control: 'rows-percent', data: { title: 'ACTIVE PROCESSES', rows: 'INDEXING FACILITY ARCHIVE|72|OK\nTRIANGULATING DEAD-NET RELAY|31|LOCK\nCALIBRATING SENSOR GRID|84|OK\nVERIFYING CREDENTIAL HASH|56|WARN' }, fields: TEMPLATE_FIELDSETS.titleRows },
+            { id: 'trace-log', group: 'Logs', label: 'Trace Log', generator: 'trace-log', supportsPreviewAnimation: true, control: 'log-rows', data: { title: 'TRACE LOG', rows: '0x1A2F|READ|sector.alpha|checksum ok\n0x1A30|SCAN|breach-vector|noise +02\n0x1A31|LOCK|credential hash|accepted\n0x1A32|DROP|packet ghost|retry queued' }, fields: TEMPLATE_FIELDSETS.titleRows },
+            { id: 'audit-log', group: 'Logs', label: 'Audit Log', generator: 'audit-log', supportsPreviewAnimation: false, control: 'log-rows', data: { title: 'ACCESS AUDIT', rows: '2084-05-24 03:16|EMPLOYEE|SEARCH|profit archive\n2084-05-24 03:17|ELEVATED|FSEARCH|manasphere\n2084-05-24 03:18|ADMIN|STATUS|facility map' }, fields: TEMPLATE_FIELDSETS.titleRows },
+
+            { id: 'progress-bars', group: 'Status/Meters', label: 'Progress Bars', generator: 'progress-bars', supportsPreviewAnimation: true, control: 'rows-percent', data: { title: 'PROCESS ARRAY', rows: 'INDEXING ARCHIVE|72|OK\nDECRYPTING SECURITY LOG|41|WARN\nSCANNING ENTITY RESIDUE|91|ALERT\nCONTACTING DEAD-NET NODE|22|LOCK' }, fields: TEMPLATE_FIELDSETS.titleRows },
+            { id: 'segmented-led-bars', group: 'Status/Meters', label: 'Segmented LED Bars', generator: 'segmented-led-bars', supportsPreviewAnimation: true, control: 'rows-percent', data: { title: 'LED BUS LEVELS', rows: 'POWER GRID|88|ONLINE\nUPLINK|54|DEGRADED\nARCHIVE BUS|76|ACTIVE\nSECURITY LAYER|100|LOCKED' }, fields: TEMPLATE_FIELDSETS.titleRows },
+            { id: 'bullet-chart', group: 'Status/Meters', label: 'Bullet Chart', generator: 'bullet-chart', supportsPreviewAnimation: false, control: 'rows-percent-target', data: { title: 'OPERATING LIMITS', rows: 'CORE TEMP|48|70\nPRESSURE|63|80\nSYNC|94|90\nNOISE|78|60' }, fields: TEMPLATE_FIELDSETS.titleRows },
+            { id: 'numeric-readouts', group: 'Status/Meters', label: 'Numeric Readouts', generator: 'numeric-readouts', supportsPreviewAnimation: false, control: 'log-rows', data: { title: 'NUMERIC READOUTS', rows: 'REACTOR OUTPUT|87.6|%|OK\nCONTAINMENT PRESSURE|2.37|ATM|WARN\nCORE TEMP|612|C|ALERT\nNEUTRON FLUX|6.21e13|n/cm/s|OK' }, fields: TEMPLATE_FIELDSETS.titleRows },
+            { id: 'signal-quality', group: 'Status/Meters', label: 'Signal Quality', generator: 'signal-quality', supportsPreviewAnimation: true, control: 'rows-percent', data: { title: 'SIGNAL QUALITY', rows: 'CARRIER LOCK|91|CLEAN\nSNR|74|NOMINAL\nPHASE JITTER|18|LOW\nDEAD-NET SYNC|63|DEGRADED' }, fields: TEMPLATE_FIELDSETS.titleRows },
+            { id: 'packet-loss', group: 'Status/Meters', label: 'Packet Loss', generator: 'packet-loss', supportsPreviewAnimation: true, control: 'rows-percent', data: { title: 'PACKET LOSS MONITOR', rows: 'UPLINK LOSS|2|OK\nPACKET DECAY|14|WARN\nCRC FAULTS|6|OK\nGHOST REPLIES|27|ALERT' }, fields: TEMPLATE_FIELDSETS.titleRows },
+            { id: 'system-status', group: 'Status/Meters', label: 'System Status', generator: 'system-status', supportsPreviewAnimation: false, control: 'rows-percent', data: { title: 'SYSTEM STATUS', rows: 'CORE TEMP|48|OK\nPOWER GRID|100|ONLINE\nUPLINK|54|DEGRADED\nARCHIVE BUS|80|ACTIVE\nSECURITY LAYER|100|LOCKED' }, fields: TEMPLATE_FIELDSETS.titleRows },
+
+            { id: 'sparkline', group: 'Time-Series', label: 'Sparkline', generator: 'sparkline', supportsPreviewAnimation: true, control: 'series', data: { title: 'SPARKLINE TRACE', values: '2 3 5 4 7 8 6 3 2 4 5 8 7 5 3 2', yMax: 8 }, fields: TEMPLATE_FIELDSETS.titleValues },
+            { id: 'strip-chart', group: 'Time-Series', label: 'Strip Chart', generator: 'strip-chart', supportsPreviewAnimation: true, control: 'series', data: { title: 'STRIP CHART', values: '4 4 5 6 5 4 3 2 3 4 6 8 7 5 4 3 4 6', yMax: 8 }, fields: TEMPLATE_FIELDSETS.titleValues },
+            { id: 'stacked-strip-chart', group: 'Time-Series', label: 'Stacked Strip Chart', generator: 'stacked-strip-chart', supportsPreviewAnimation: true, control: 'series-rows', data: { title: 'STACKED TELEMETRY', rows: 'MANA|2 3 4 6 8 7 5 3 2 4 6 8\nNOISE|1 2 3 3 5 8 6 4 3 2 4 6\nSYNC|7 7 6 6 5 5 6 7 8 8 7 7', yMax: 8 }, fields: [{ id: 'title', label: 'Panel title', type: 'text' }, { id: 'rows', label: 'Rows: LABEL|VALUES', type: 'textarea' }, { id: 'yMax', label: 'Y axis max', type: 'range', min: 4, max: 16, step: 1 }] },
+            { id: 'line-chart', group: 'Time-Series', label: 'Line Chart', generator: 'line-chart', supportsPreviewAnimation: true, control: 'series', data: { title: 'LINE CHART', values: '1 2 4 5 7 8 6 5 4 3 5 6 8 7 4 2', yMax: 8 }, fields: TEMPLATE_FIELDSETS.titleValues },
+            { id: 'step-chart', group: 'Time-Series', label: 'Step Chart', generator: 'step-chart', supportsPreviewAnimation: true, control: 'series', data: { title: 'STEP STATE CHART', values: '1 1 2 2 4 4 4 6 6 3 3 5 5 8 8 6', yMax: 8 }, fields: TEMPLATE_FIELDSETS.titleValues },
+            { id: 'pulse-chart', group: 'Time-Series', label: 'Pulse Chart', generator: 'pulse-chart', supportsPreviewAnimation: true, control: 'series', data: { title: 'PULSE CHART', values: '1 1 1 6 8 3 1 1 1 1 7 8 4 1 1 1', yMax: 8 }, fields: TEMPLATE_FIELDSETS.titleValues },
+
+            { id: 'oscilloscope', group: 'Signals', label: 'Oscilloscope', generator: 'oscilloscope', supportsPreviewAnimation: true, control: 'series-rows', data: { title: 'SIGNAL OSCILLOSCOPE // CH-A / CH-B', rows: 'CH-A|4 5 6 8 7 5 4 3 4 6 8 7 5 4 3 4\nCH-B|2 2 3 5 4 2 1 2 3 3 5 4 2 1 2 3', yMax: 8 }, fields: [{ id: 'title', label: 'Panel title', type: 'text' }, { id: 'rows', label: 'Rows: CHANNEL|VALUES', type: 'textarea' }, { id: 'yMax', label: 'Y axis max', type: 'range', min: 4, max: 16, step: 1 }] },
+            { id: 'ecg-trace', group: 'Signals', label: 'ECG Trace', generator: 'ecg-trace', supportsPreviewAnimation: true, control: 'log-rows', data: { title: 'BIOSCAN ARRAY // CREW VITALS', rows: 'UNIT-01 PULSE|118|OK\nUNIT-02 RESP|16|OK\nUNIT-03 NEUR|2.8|WARN\nUNIT-04 STRESS|74|ALERT' }, fields: TEMPLATE_FIELDSETS.titleRows },
+            { id: 'seismograph', group: 'Signals', label: 'Seismograph', generator: 'seismograph', supportsPreviewAnimation: true, control: 'series', data: { title: 'SUBSTRATE TREMOR', values: '2 4 2 1 3 6 4 2 5 8 6 3 2 4 7 5 3 1', yMax: 8 }, fields: TEMPLATE_FIELDSETS.titleValues },
+            { id: 'waveform', group: 'Signals', label: 'Waveform', generator: 'waveform', supportsPreviewAnimation: true, control: 'series', data: { title: 'WAVEFORM DISPLAY', values: '4 5 6 7 8 7 6 5 4 3 2 1 2 3 4 5 6 7', yMax: 8 }, fields: TEMPLATE_FIELDSETS.titleValues },
+            { id: 'a-scope-radar', group: 'Signals', label: 'A-Scope Radar', generator: 'a-scope-radar', supportsPreviewAnimation: true, control: 'series', data: { title: 'A-SCOPE RADAR', values: '1 1 2 3 7 2 1 2 4 8 3 1 1 2 5 3 1', yMax: 8 }, fields: TEMPLATE_FIELDSETS.titleValues },
+
+            { id: 'waterfall', group: 'Matrix/Intensity', label: 'Waterfall', generator: 'waterfall', supportsPreviewAnimation: true, control: 'matrix', data: { title: 'SPECTRUM WATERFALL', matrix: '1 2 1 2 3 2 1 3 4 3 2 1\n2 1 2 3 2 1 3 4 4 3 1 2\n1 2 3 2 4 4 3 2 3 4 2 1\n2 3 4 4 3 2 1 2 3 4 4 2' }, fields: TEMPLATE_FIELDSETS.titleMatrix },
+            { id: 'spectrogram-matrix', group: 'Matrix/Intensity', label: 'Spectrogram Matrix', generator: 'spectrogram-matrix', supportsPreviewAnimation: true, control: 'matrix', data: { title: 'SPECTROGRAM MATRIX', matrix: '1 1 2 2 3 4 3 2 1 2\n1 2 2 3 4 4 4 3 2 1\n2 2 3 4 4 3 2 2 1 1\n1 3 4 4 3 2 1 2 3 2' }, fields: TEMPLATE_FIELDSETS.titleMatrix },
+            { id: 'heatmap-matrix', group: 'Matrix/Intensity', label: 'Heatmap Matrix', generator: 'heatmap-matrix', supportsPreviewAnimation: false, control: 'matrix', data: { title: 'CHAMBER HEATMAP // PRESSURE FIELD', matrix: '1 1 2 2 3 3 2 1\n1 2 2 3 4 4 3 2\n2 2 3 4 4 4 3 2\n2 3 4 4 4 4 3 2\n1 2 3 4 4 3 2 1\n1 1 2 3 3 2 1 1' }, fields: TEMPLATE_FIELDSETS.titleMatrix },
+            { id: 'health-matrix', group: 'Matrix/Intensity', label: 'Health Matrix', generator: 'health-matrix', supportsPreviewAnimation: false, control: 'log-rows', data: { title: 'FACILITY HEALTH MATRIX', rows: 'CORE|OK|OK|WARN|OK\nLAB|OK|WARN|ALERT|LOCK\nARCHIVE|OK|OK|OK|DEGRADED\nGATE|WARN|ALERT|LOCK|UNKNOWN' }, fields: TEMPLATE_FIELDSETS.titleRows },
+            { id: 'raster-event-plot', group: 'Matrix/Intensity', label: 'Raster Event Plot', generator: 'raster-event-plot', supportsPreviewAnimation: true, control: 'matrix', data: { title: 'RASTER EVENT PLOT', matrix: '0 0 1 0 0 1 0 1 0 0 0 1\n1 0 0 0 1 0 0 0 0 1 0 0\n0 1 0 1 0 0 1 0 0 0 1 0\n0 0 0 1 0 0 0 1 0 1 0 0' }, fields: TEMPLATE_FIELDSETS.titleMatrix },
+            { id: 'contour-map', group: 'Matrix/Intensity', label: 'Contour Map', generator: 'contour-map', supportsPreviewAnimation: true, control: 'matrix', data: { title: 'CONTOUR MAP // MANA DENSITY', matrix: '1 1 2 2 2 1 1\n1 2 3 3 3 2 1\n2 3 4 4 4 3 2\n2 3 4 5 4 3 2\n1 2 3 4 3 2 1\n1 1 2 2 2 1 1' }, fields: TEMPLATE_FIELDSETS.titleMatrix },
+
+            { id: 'facility-grid', group: 'Schematics', label: 'Facility Grid', generator: 'facility-grid', supportsPreviewAnimation: false, control: 'log-rows', data: { title: 'FACILITY GRID', rows: 'A1|EMPTY|A2|ACTIVE|A3|SEALED\nB1|ACTIVE|B2|ALERT|B3|OFFLINE\nC1|EMPTY|C2|ACTIVE|C3|BREACH\nD1|LOCKED|D2|LOCKED|D3|UNKNOWN' }, fields: TEMPLATE_FIELDSETS.titleRows },
+            { id: 'network-topology', group: 'Schematics', label: 'Network Topology', generator: 'network-topology', supportsPreviewAnimation: true, control: 'none', data: { title: 'NETWORK TOPOLOGY', rows: 'CORE>BUS-A>LAB-01\nBUS-A>LAB-02\nCORE>ARCHIVE\nCORE>SEC>GATE>RELAY' }, fields: TEMPLATE_FIELDSETS.titleRows },
+            { id: 'process-flow', group: 'Schematics', label: 'Process Flow', generator: 'process-flow', supportsPreviewAnimation: false, control: 'log-rows', data: { title: 'PROCESS FLOW', rows: 'INTAKE|FILTER|REAGENT MIX|OK\nREAGENT MIX|GATE CORE|PRESSURE|WARN\nGATE CORE|CONTAINMENT|SEAL|LOCKED\nCONTAINMENT|ARCHIVE|LOG|OK' }, fields: TEMPLATE_FIELDSETS.titleRows },
+            { id: 'route-map', group: 'Schematics', label: 'Route Map', generator: 'route-map', supportsPreviewAnimation: false, control: 'log-rows', data: { title: 'ROUTE MAP', rows: 'BRE-01 GATEHEAD|02.1km|CLEAR\nBRE-02 RED HARVEST|04.8km|WARN\nBRE-03 FIREWATCH|07.4km|ACTIVE\nBRE-04 BLACKWATER|11.2km|HAZARD\nBRE-06 STOCKADE|14.9km|LOCKED' }, fields: TEMPLATE_FIELDSETS.titleRows },
+            { id: 'radar-ppi-static', group: 'Schematics', label: 'Radar PPI Static', generator: 'radar-ppi-static', supportsPreviewAnimation: true, control: 'log-rows', data: { title: 'TACTICAL SWEEP // PPI', rows: '01|△|1.2km|030\n02|□|2.8km|110\n03|◇|4.1km|220\n04|○|1.7km|300' }, fields: TEMPLATE_FIELDSETS.titleRows },
+            { id: 'compass-bearing', group: 'Schematics', label: 'Compass Bearing', generator: 'compass-bearing', supportsPreviewAnimation: true, control: 'none', data: { title: 'COMPASS BEARING', heading: '274', label: 'DEAD-NET RELAY' }, fields: [{ id: 'title', label: 'Panel title', type: 'text' }, { id: 'heading', label: 'Heading degrees', type: 'range', min: 0, max: 359, step: 1 }, { id: 'label', label: 'Target label', type: 'text' }] },
+
+            { id: 'hex-dump', group: 'Technical Dumps', label: 'Hex Dump', generator: 'hex-dump', supportsPreviewAnimation: false, control: 'none', data: { title: 'HEX DUMP', text: 'ARES BLACK DESERT DATA CHANNEL' }, fields: [{ id: 'title', label: 'Panel title', type: 'text' }, { id: 'text', label: 'Source text', type: 'textarea' }] },
+            { id: 'memory-map', group: 'Technical Dumps', label: 'Memory Map', generator: 'memory-map', supportsPreviewAnimation: false, control: 'log-rows', data: { title: 'MEMORY MAP', rows: '0x0000|BOOT ROM|LOCKED\n0x1000|ARCHIVE INDEX|ACTIVE\n0x2400|ENTITY CACHE|CORRUPT\n0x4000|USER SESSION|LIVE\n0x7F00|BLACK BOX|SEALED' }, fields: TEMPLATE_FIELDSETS.titleRows },
+            { id: 'register-display', group: 'Technical Dumps', label: 'Register Display', generator: 'register-display', supportsPreviewAnimation: true, control: 'log-rows', data: { title: 'REGISTER DISPLAY', rows: 'AX|0x13F7\nBX|0x00C4\nCX|0xA91D\nDX|0xDEAD\nSP|0x7C00\nFLAGS|Z0 C1 N0 V1' }, fields: TEMPLATE_FIELDSETS.titleRows }
+        ];
+
+        MESSAGE_TEMPLATES.forEach(template => {
+            template.type = template.type || template.generator;
+            template.title = template.title || template.data?.title || template.label;
+        });
 
         const state = {
             metadata: {},
@@ -1645,6 +1744,648 @@ Last confirmed in Command Core during external relay failure.
                 const buttons = document.createElement('div');
                 buttons.className = 'template-buttons';
                 group.items.forEach(template => {
+                    const button = document.createElement('button');
+                    button.className = 'template-btn';
+                    button.type = 'button';
+                    button.textContent = template.label;
+                    button.addEventListener('click', () => openTemplateEditor(template));
+                    buttons.appendChild(button);
+                });
+
+                groupEl.append(title, buttons);
+                host.appendChild(groupEl);
+            });
+        }
+
+        // Active schema-based template builder. These functions supersede the older ad-hoc popup helpers above.
+        let telemetryTemplateState = null;
+        let telemetryTemplateTimer = null;
+        const templateReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+
+        function stopTemplatePreviewTimer() {
+            if (telemetryTemplateTimer) {
+                clearInterval(telemetryTemplateTimer);
+                telemetryTemplateTimer = null;
+            }
+        }
+
+        function cloneTemplateData(data) {
+            return JSON.parse(JSON.stringify(data || {}));
+        }
+
+        function parseTemplateLines(value) {
+            return String(value || '')
+                .split(/\r?\n/)
+                .map(line => line.trim())
+                .filter(Boolean);
+        }
+
+        function parsePipeLine(line) {
+            return String(line || '').split('|').map(part => part.trim());
+        }
+
+        function parsePipeRows(value) {
+            return parseTemplateLines(value).map(parsePipeLine);
+        }
+
+        function clampNumber(value, min, max) {
+            const numeric = Number(value);
+            if (!Number.isFinite(numeric)) return min;
+            return Math.max(min, Math.min(max, numeric));
+        }
+
+        function parseNumberList(value) {
+            return String(value || '')
+                .split(/[\s,;|]+/)
+                .map(part => Number(part.trim()))
+                .filter(Number.isFinite);
+        }
+
+        function rotateArray(values, frame) {
+            if (!values.length) return values;
+            const offset = frame % values.length;
+            return values.slice(offset).concat(values.slice(0, offset));
+        }
+
+        function blockBar(value, width = 10, style = 'solid') {
+            const safeValue = clampNumber(value, 0, 100);
+            const filled = Math.round((safeValue / 100) * width);
+            const full = style === 'led' ? '▰' : '█';
+            const empty = style === 'led' ? '▱' : '░';
+            return full.repeat(filled) + empty.repeat(Math.max(0, width - filled));
+        }
+
+        function densityGlyph(value, max = 4) {
+            const glyphs = [' ', '░', '▒', '▓', '█'];
+            const index = Math.round(clampNumber(value, 0, max) / max * (glyphs.length - 1));
+            return glyphs[index];
+        }
+
+        function sparkline(values, yMax = 8, frame = 0) {
+            const glyphs = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+            return rotateArray(values, frame).map(value => {
+                const index = Math.round(clampNumber(value, 0, yMax) / yMax * (glyphs.length - 1));
+                return glyphs[index];
+            }).join('');
+        }
+
+        function buildAsciiBox(title, lines) {
+            const safeLines = Array.isArray(lines) ? lines : parseTemplateLines(lines);
+            const safeTitle = String(title || 'ARES TELEMETRY').trim();
+            const width = Math.max(
+                32,
+                visibleLength(safeTitle) + 4,
+                ...safeLines.map(line => visibleLength(line) + 2)
+            );
+            const topFill = Math.max(0, width - visibleLength(safeTitle) - 3);
+            const top = `╔═ ${safeTitle} ${'═'.repeat(topFill)}╗`;
+            const body = safeLines.map(line => `║ ${padVisible(line, width - 2)} ║`);
+            const bottom = `╚${'═'.repeat(width)}╝`;
+            return [top, ...body, bottom].join('\n');
+        }
+
+        function renderPercentRows(data, frame, options = {}) {
+            return parsePipeRows(data.rows).map((row, index) => {
+                const [label = `ROW-${index + 1}`, value = 0, status = 'OK'] = row;
+                const pulse = options.spinner ? ['◢', '◐', '◒', '◣'][(frame + index) % 4] + ' ' : '';
+                const bar = blockBar(value, options.width || 10, options.style || 'solid');
+                return `${pulse}${padVisible(label.toUpperCase(), options.labelWidth || 24)} [${bar}] ${String(value).padStart(3)}% ${status}`;
+            });
+        }
+
+        function renderMatrixRows(matrixText, frame = 0, max = 4, animate = false) {
+            const rows = parseTemplateLines(matrixText).map(row => parseNumberList(row));
+            const shifted = animate ? rotateArray(rows, frame) : rows;
+            return shifted.map(row => row.map(value => densityGlyph(value, max)).join(' '));
+        }
+
+        function renderVerticalPlot(title, values, yMax, frame = 0, mode = 'bars') {
+            const rotated = rotateArray(values, frame).slice(0, 18);
+            const rows = [];
+            for (let y = yMax; y >= 1; y -= 1) {
+                const cells = rotated.map((value, index) => {
+                    if (mode === 'line') {
+                        if (Math.round(value) === y) {
+                            const next = rotated[index + 1] ?? value;
+                            if (next > value) return '╱';
+                            if (next < value) return '╲';
+                            return '─';
+                        }
+                        return ' ';
+                    }
+                    if (mode === 'step') return value >= y ? (rotated[index - 1] !== value ? '╭' : '─') : ' ';
+                    return value >= y ? '█' : ' ';
+                }).join('  ');
+                rows.push(`${String(y).padStart(2, '0')} │ ${cells}`);
+            }
+            rows.push(`   └${'─'.repeat(Math.max(18, rotated.length * 3))}`);
+            rows.push(`    ${rotated.map((_, index) => String(index + 1).padStart(2, '0')).join(' ')}`);
+            return buildAsciiBox(title, rows);
+        }
+
+        function ecgTrace(frame, width = 34) {
+            const pattern = '____/\\_/\\______________/\\_/\\________';
+            const repeated = pattern.repeat(3);
+            const offset = frame % pattern.length;
+            return repeated.slice(offset, offset + width);
+        }
+
+        function waveformTrace(values, yMax, frame) {
+            const chars = ['_', '_', '╱', '─', '╲', '_'];
+            return rotateArray(values, frame).map(value => chars[Math.round(clampNumber(value, 0, yMax) / yMax * (chars.length - 1))]).join('');
+        }
+
+        const TEMPLATE_GENERATORS = {
+            'event-log': (data, frame) => {
+                const rows = rotateArray(parsePipeRows(data.rows), frame).slice(0, 5).map(row => {
+                    const [time = '--:--:--', tag = 'SYS', stateText = 'OK', message = 'No event'] = row;
+                    return `${time}  [${tag}] ${padVisible(message, 34)} [${stateText}]`;
+                });
+                return buildAsciiBox(data.title, rows);
+            },
+            'alarm-summary': data => buildAsciiBox(data.title, parsePipeRows(data.rows).map(row => {
+                const [id = 'A-000', severity = 'INFO', message = 'Alarm', action = 'MONITOR'] = row;
+                return `${padVisible(id, 7)} ${padVisible(severity, 6)} ${padVisible(message, 30)} ${action}`;
+            })),
+            'active-processes': (data, frame) => buildAsciiBox(data.title, renderPercentRows(data, frame, { spinner: true, labelWidth: 30 })),
+            'trace-log': (data, frame) => buildAsciiBox(data.title, rotateArray(parsePipeRows(data.rows), frame).slice(0, 5).map(row => row.join('  ::  '))),
+            'audit-log': data => buildAsciiBox(data.title, parsePipeRows(data.rows).map(row => row.join('  |  '))),
+            'progress-bars': (data, frame) => buildAsciiBox(data.title, renderPercentRows(data, frame, { spinner: true, labelWidth: 28 })),
+            'segmented-led-bars': (data, frame) => buildAsciiBox(data.title, renderPercentRows(data, frame, { style: 'led', labelWidth: 22 })),
+            'bullet-chart': data => buildAsciiBox(data.title, parsePipeRows(data.rows).map(row => {
+                const [label = 'VALUE', value = 0, target = 70] = row;
+                const width = 18;
+                const marker = Math.round(clampNumber(target, 0, 100) / 100 * width);
+                const filled = Math.round(clampNumber(value, 0, 100) / 100 * width);
+                const cells = Array.from({ length: width }, (_, index) => {
+                    if (index === marker) return '│';
+                    return index < filled ? '█' : '░';
+                }).join('');
+                return `${padVisible(label, 18)} [${cells}] ${String(value).padStart(3)} / TGT ${target}`;
+            })),
+            'numeric-readouts': data => buildAsciiBox(data.title, parsePipeRows(data.rows).map(row => {
+                const [label = 'VALUE', value = '0', unit = '', stateText = 'OK'] = row;
+                return `${padVisible(label, 24)} ${String(value).padStart(8)} ${padVisible(unit, 6)} ${stateText}`;
+            })),
+            'signal-quality': (data, frame) => buildAsciiBox(data.title, renderPercentRows(data, frame, { style: 'led', labelWidth: 18 })),
+            'packet-loss': (data, frame) => buildAsciiBox(data.title, parsePipeRows(data.rows).map((row, index) => {
+                const [label = 'LOSS', value = 0, stateText = 'OK'] = row;
+                const pulses = '·:+*#';
+                const rail = Array.from({ length: 16 }, (_, railIndex) => (railIndex + frame + index) % 7 === 0 ? pulses[(railIndex + frame) % pulses.length] : '·').join('');
+                return `${padVisible(label, 18)} ${rail} ${String(value).padStart(3)}% ${stateText}`;
+            })),
+            'system-status': data => buildAsciiBox(data.title, parsePipeRows(data.rows).map(row => {
+                const [label = 'SYSTEM', value = 0, stateText = 'OK'] = row;
+                return `${padVisible(label, 20)} ${padVisible(stateText, 9)} [${blockBar(value, 10)}]`;
+            })),
+            'sparkline': (data, frame) => buildAsciiBox(data.title, [`SIGNAL  ${sparkline(parseNumberList(data.values), Number(data.yMax) || 8, frame)}`]),
+            'strip-chart': (data, frame) => buildAsciiBox(data.title, [
+                `FRAME ${String((frame % 99) + 1).padStart(2, '0')}  SIGNAL ${sparkline(parseNumberList(data.values), Number(data.yMax) || 8, frame)}`,
+                `LATEST ${String(rotateArray(parseNumberList(data.values), frame).at(-1) || 0).padStart(2, '0')} / RANGE 0-${data.yMax || 8}`
+            ]),
+            'stacked-strip-chart': (data, frame) => buildAsciiBox(data.title, parsePipeRows(data.rows).map(row => {
+                const [label = 'TRACE', values = '1 2 3'] = row;
+                return `${padVisible(label, 8)} ${sparkline(parseNumberList(values), Number(data.yMax) || 8, frame)}`;
+            })),
+            'line-chart': (data, frame) => renderVerticalPlot(data.title, parseNumberList(data.values), Number(data.yMax) || 8, frame, 'line'),
+            'step-chart': (data, frame) => renderVerticalPlot(data.title, parseNumberList(data.values), Number(data.yMax) || 8, frame, 'step'),
+            'pulse-chart': (data, frame) => buildAsciiBox(data.title, [`PULSE ${ecgTrace(frame, 38)}`, `RATE  ${sparkline(parseNumberList(data.values), Number(data.yMax) || 8, frame)}`]),
+            'oscilloscope': (data, frame) => buildAsciiBox(data.title, parsePipeRows(data.rows).map(row => {
+                const [label = 'CH', values = '1 2 3'] = row;
+                return `${padVisible(label, 6)} ${sparkline(parseNumberList(values), Number(data.yMax) || 8, frame)}  ${waveformTrace(parseNumberList(values), Number(data.yMax) || 8, frame)}`;
+            })),
+            'ecg-trace': (data, frame) => buildAsciiBox(data.title, parsePipeRows(data.rows).map((row, index) => {
+                const [unit = `UNIT-${index + 1}`, value = '90', stateText = 'OK'] = row;
+                return `${padVisible(unit, 12)} ${ecgTrace(frame + index * 5, 34)} ${String(value).padStart(4)} ${stateText}`;
+            })),
+            'seismograph': (data, frame) => buildAsciiBox(data.title, [`TREMOR ${waveformTrace(parseNumberList(data.values), Number(data.yMax) || 8, frame)}`, `RMS ${String((2 + (frame % 9) / 10).toFixed(2)).padStart(5)}   STATUS ELEVATED`]),
+            'waveform': (data, frame) => buildAsciiBox(data.title, [`WAVE ${waveformTrace(parseNumberList(data.values), Number(data.yMax) || 8, frame)}`, `AMP  ${sparkline(parseNumberList(data.values), Number(data.yMax) || 8, frame)}`]),
+            'a-scope-radar': (data, frame) => renderVerticalPlot(data.title, parseNumberList(data.values), Number(data.yMax) || 8, frame, 'bars'),
+            'waterfall': (data, frame) => buildAsciiBox(data.title, renderMatrixRows(data.matrix, frame, 4, true)),
+            'spectrogram-matrix': (data, frame) => buildAsciiBox(data.title, [
+                'FREQ  10 100 1k 10k',
+                ...renderMatrixRows(data.matrix, frame, 4, true),
+                'REF LEVEL -20dB // PEAK HOLD ON'
+            ]),
+            'heatmap-matrix': data => buildAsciiBox(data.title, renderMatrixRows(data.matrix, 0, 4, false)),
+            'health-matrix': data => buildAsciiBox(data.title, parsePipeRows(data.rows).map(row => `${padVisible(row[0] || 'SYS', 10)} ${row.slice(1).map(stateText => padVisible(stateText, 8)).join(' ')}`)),
+            'raster-event-plot': (data, frame) => buildAsciiBox(data.title, renderMatrixRows(data.matrix, frame, 1, true).map(row => row.replace(/░/g, '·').replace(/█/g, '│'))),
+            'contour-map': (data, frame) => {
+                const glyphs = [' ', '·', '╱', '╳', '▓', '█'];
+                const rows = parseTemplateLines(data.matrix).map(row => parseNumberList(row));
+                return buildAsciiBox(data.title, rotateArray(rows, frame).map(row => row.map(value => glyphs[Math.round(clampNumber(value, 0, 5))]).join(' ')));
+            },
+            'facility-grid': data => buildAsciiBox(data.title, parsePipeRows(data.rows).map(row => {
+                const cells = [];
+                for (let index = 0; index < row.length; index += 2) cells.push(`[${row[index] || '--'}] ${padVisible(row[index + 1] || 'UNKNOWN', 8)}`);
+                return cells.join(' ');
+            })),
+            'network-topology': (data, frame) => buildAsciiBox(data.title, parseTemplateLines(data.rows).map((route, index) => {
+                const packet = (frame + index) % 3 === 0 ? '◆' : '─';
+                return route.split('>').map(node => `[${node.trim()}]`).join(`${packet}${packet}`);
+            })),
+            'process-flow': data => buildAsciiBox(data.title, parsePipeRows(data.rows).map(row => `${padVisible(row[0], 14)} ─▶ ${padVisible(row[1], 14)} ${padVisible(row[2], 10)} ${row[3] || ''}`)),
+            'route-map': data => buildAsciiBox(data.title, parsePipeRows(data.rows).map((row, index) => {
+                const [site = `SITE-${index + 1}`, range = '--', stateText = 'UNKNOWN'] = row;
+                return `${String(index + 1).padStart(2, '0')} ── ${padVisible(site, 24)} ${padVisible(range, 8)} ${stateText}`;
+            })),
+            'radar-ppi-static': (data, frame) => buildAsciiBox(data.title, [
+                '        000',
+                '    .-----------.',
+                `270 | ${['/', '-', '\\', '|'][frame % 4]}   +   ${['\\', '|', '/', '-'][frame % 4]} | 090`,
+                '    `-----------´',
+                '        180',
+                ...parsePipeRows(data.rows).map(row => `${row[0] || '--'} ${row[1] || '○'} RANGE ${row[2] || '--'} BRG ${row[3] || '---'}`)
+            ]),
+            'compass-bearing': (data, frame) => {
+                const heading = clampNumber(data.heading, 0, 359);
+                const arrows = ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖'];
+                const arrow = arrows[Math.round(heading / 45) % arrows.length];
+                return buildAsciiBox(data.title, ['       N', `   W --${arrow}-- E`, '       S', `BEARING ${String(Math.round(heading)).padStart(3, '0')}° // ${data.label || 'TARGET'}`, `PHASE ${['◢', '◐', '◒', '◣'][frame % 4]}`]);
+            },
+            'hex-dump': data => {
+                const bytes = Array.from(String(data.text || ''), char => char.charCodeAt(0));
+                const lines = [];
+                for (let index = 0; index < bytes.length; index += 8) {
+                    const chunk = bytes.slice(index, index + 8);
+                    const hex = chunk.map(byte => byte.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+                    const ascii = chunk.map(byte => byte >= 32 && byte <= 126 ? String.fromCharCode(byte) : '.').join('');
+                    lines.push(`${index.toString(16).toUpperCase().padStart(4, '0')}  ${padVisible(hex, 24)}  ${ascii}`);
+                }
+                return buildAsciiBox(data.title, lines);
+            },
+            'memory-map': data => buildAsciiBox(data.title, parsePipeRows(data.rows).map(row => `${padVisible(row[0], 8)} ${padVisible(row[1], 18)} ${row[2] || ''}`)),
+            'register-display': (data, frame) => buildAsciiBox(data.title, parsePipeRows(data.rows).map((row, index) => {
+                const [name = 'REG', value = '0x0000'] = row;
+                const suffix = index === frame % Math.max(1, parsePipeRows(data.rows).length) ? ' ◄' : '';
+                return `${padVisible(name, 8)} ${value}${suffix}`;
+            }))
+        };
+
+        function buildTemplateOutput(template, data = {}, frame = 0) {
+            const generator = TEMPLATE_GENERATORS[template.generator];
+            if (!generator) return buildAsciiBox(template.title || template.label, ['Template generator unavailable.']);
+            return generator(data, frame);
+        }
+
+        function updateTemplateFieldInput(key) {
+            const input = byId(`templateField-${key}`);
+            if (!input || !telemetryTemplateState) return;
+            input.value = telemetryTemplateState.data[key] ?? '';
+        }
+
+        function makeTemplateSlider(labelText, value, min, max, onChange) {
+            const row = document.createElement('div');
+            row.className = 'template-control-row';
+            const label = document.createElement('div');
+            label.className = 'template-control-label';
+            label.textContent = labelText;
+            const range = document.createElement('input');
+            range.type = 'range';
+            range.min = min;
+            range.max = max;
+            range.value = value;
+            const number = document.createElement('input');
+            number.type = 'number';
+            number.min = min;
+            number.max = max;
+            number.value = value;
+            const sync = nextValue => {
+                const safeValue = clampNumber(nextValue, Number(min), Number(max));
+                range.value = safeValue;
+                number.value = safeValue;
+                onChange(safeValue);
+                updateTemplateEditorPreview();
+            };
+            range.addEventListener('input', () => sync(range.value));
+            number.addEventListener('input', () => sync(number.value));
+            row.append(label, range, number);
+            return row;
+        }
+
+        function renderSchemaValueControls() {
+            const host = byId('templateValueControls');
+            if (!host || !telemetryTemplateState) return;
+            const { template, data } = telemetryTemplateState;
+            host.textContent = '';
+            host.classList.add('hidden');
+            const control = template.control;
+            if (!control || control === 'none') return;
+
+            const title = document.createElement('div');
+            title.className = 'template-fieldset-title';
+            title.textContent = 'Quick value controls';
+            host.appendChild(title);
+
+            if (control === 'rows-percent' || control === 'rows-percent-target') {
+                const rows = parsePipeRows(data.rows);
+                rows.forEach((row, index) => {
+                    host.appendChild(makeTemplateSlider(row[0] || `ROW ${index + 1}`, Number(row[1]) || 0, 0, 100, nextValue => {
+                        row[1] = String(nextValue);
+                        data.rows = rows.map(parts => parts.join('|')).join('\n');
+                        updateTemplateFieldInput('rows');
+                    }));
+                });
+            }
+
+            if (control === 'series') {
+                const values = parseNumberList(data.values);
+                const yMax = Number(data.yMax) || 8;
+                values.forEach((value, index) => {
+                    host.appendChild(makeTemplateSlider(`SAMPLE ${index + 1}`, value, 0, yMax, nextValue => {
+                        values[index] = nextValue;
+                        data.values = values.join(' ');
+                        updateTemplateFieldInput('values');
+                    }));
+                });
+            }
+
+            if (control === 'series-rows') {
+                const rows = parsePipeRows(data.rows);
+                const yMax = Number(data.yMax) || 8;
+                rows.forEach((row, rowIndex) => {
+                    const values = parseNumberList(row[1]);
+                    values.forEach((value, valueIndex) => {
+                        host.appendChild(makeTemplateSlider(`${row[0] || `TRACE ${rowIndex + 1}`} ${valueIndex + 1}`, value, 0, yMax, nextValue => {
+                            values[valueIndex] = nextValue;
+                            row[1] = values.join(' ');
+                            data.rows = rows.map(parts => parts.join('|')).join('\n');
+                            updateTemplateFieldInput('rows');
+                        }));
+                    });
+                });
+            }
+
+            if (control === 'matrix') {
+                const rows = parseTemplateLines(data.matrix).map(row => parseNumberList(row));
+                rows.forEach((row, rowIndex) => {
+                    row.forEach((value, cellIndex) => {
+                        host.appendChild(makeTemplateSlider(`R${rowIndex + 1} C${cellIndex + 1}`, value, 0, 5, nextValue => {
+                            rows[rowIndex][cellIndex] = nextValue;
+                            data.matrix = rows.map(parts => parts.join(' ')).join('\n');
+                            updateTemplateFieldInput('matrix');
+                        }));
+                    });
+                });
+            }
+
+            if (host.childNodes.length > 1) host.classList.remove('hidden');
+        }
+
+        function createTemplateFieldControl(field) {
+            const label = document.createElement('label');
+            label.textContent = field.label;
+            const value = telemetryTemplateState.data[field.id] ?? '';
+
+            if (field.type === 'textarea') {
+                const input = document.createElement('textarea');
+                input.id = `templateField-${field.id}`;
+                input.value = value;
+                input.addEventListener('input', () => {
+                    telemetryTemplateState.data[field.id] = input.value;
+                    renderSchemaValueControls();
+                    updateTemplateEditorPreview();
+                });
+                label.appendChild(input);
+                return label;
+            }
+
+            if (field.type === 'select') {
+                const input = document.createElement('select');
+                input.id = `templateField-${field.id}`;
+                (field.options || []).forEach(option => {
+                    const item = document.createElement('option');
+                    item.value = option.value ?? option;
+                    item.textContent = option.label ?? option;
+                    input.appendChild(item);
+                });
+                input.value = value;
+                input.addEventListener('change', () => {
+                    telemetryTemplateState.data[field.id] = input.value;
+                    updateTemplateEditorPreview();
+                });
+                label.appendChild(input);
+                return label;
+            }
+
+            if (field.type === 'range') {
+                const row = document.createElement('div');
+                row.className = 'template-control-row';
+                const slider = document.createElement('input');
+                slider.id = `templateField-${field.id}`;
+                slider.type = 'range';
+                slider.min = field.min ?? 0;
+                slider.max = field.max ?? 100;
+                slider.step = field.step ?? 1;
+                slider.value = value;
+                const number = document.createElement('input');
+                number.type = 'number';
+                number.min = slider.min;
+                number.max = slider.max;
+                number.step = slider.step;
+                number.value = value;
+                const setValue = nextValue => {
+                    telemetryTemplateState.data[field.id] = String(nextValue);
+                    slider.value = nextValue;
+                    number.value = nextValue;
+                    renderSchemaValueControls();
+                    updateTemplateEditorPreview();
+                };
+                slider.addEventListener('input', () => setValue(slider.value));
+                number.addEventListener('input', () => setValue(number.value));
+                row.append(slider, number);
+                label.appendChild(row);
+                return label;
+            }
+
+            const input = document.createElement('input');
+            input.id = `templateField-${field.id}`;
+            input.type = field.type === 'number' ? 'number' : 'text';
+            input.value = value;
+            input.addEventListener('input', () => {
+                telemetryTemplateState.data[field.id] = input.value;
+                updateTemplateEditorPreview();
+            });
+            label.appendChild(input);
+            return label;
+        }
+
+        function updateTemplateEditorPreview() {
+            if (!telemetryTemplateState) return;
+            const preview = byId('templateEditPreview');
+            if (!preview) return;
+            preview.textContent = buildTemplateOutput(
+                telemetryTemplateState.template,
+                telemetryTemplateState.data,
+                telemetryTemplateState.frame
+            );
+        }
+
+        function startTemplatePreviewTimer() {
+            stopTemplatePreviewTimer();
+            if (!telemetryTemplateState?.animate || templateReducedMotion?.matches) return;
+            telemetryTemplateTimer = setInterval(() => {
+                telemetryTemplateState.frame += 1;
+                updateTemplateEditorPreview();
+            }, 120);
+        }
+
+        function insertTemplateOutput(text, label) {
+            if (!currentEntry()) {
+                setStatus('Create or select an entry before inserting a template.', 'warn');
+                return;
+            }
+            insertTextAtCursor(els.entryBody, text);
+            syncEntryFromForm();
+            renderPreview();
+            setStatus(`Inserted template: ${label}`);
+            closeTemplatePopup();
+        }
+
+        function insertMessageTemplate(template) {
+            insertTemplateOutput(buildTemplateOutput(template, cloneTemplateData(template.data), 0), template.label);
+        }
+
+        function openTemplatePopup() {
+            const overlay = els.templatePopupOverlay;
+            if (!overlay) return;
+            overlay.classList.remove('hidden');
+            overlay.setAttribute('aria-hidden', 'false');
+            showTemplatePalette();
+            const firstButton = overlay.querySelector('.template-btn');
+            if (firstButton) firstButton.focus();
+        }
+
+        function closeTemplatePopup() {
+            const overlay = els.templatePopupOverlay;
+            if (!overlay || overlay.classList.contains('hidden')) return;
+            stopTemplatePreviewTimer();
+            overlay.classList.add('hidden');
+            overlay.setAttribute('aria-hidden', 'true');
+            telemetryTemplateState = null;
+            activeTemplate = null;
+            const trigger = byId('openTemplatePopupBtn');
+            if (trigger) trigger.focus();
+        }
+
+        function showTemplatePalette() {
+            stopTemplatePreviewTimer();
+            telemetryTemplateState = null;
+            activeTemplate = null;
+            const palette = byId('templatePalette');
+            const editor = byId('templateEditor');
+            const title = byId('templatePopupTitle');
+            const hint = byId('templatePopupHint');
+            if (palette) palette.classList.remove('hidden');
+            if (editor) {
+                editor.classList.add('hidden');
+                editor.textContent = '';
+            }
+            if (title) title.textContent = 'Message Content Templates';
+            if (hint) hint.textContent = 'Choose a telemetry template, edit its values, then insert a static ASCII snapshot into the Body text.';
+        }
+
+        function openTemplateEditor(template) {
+            const palette = byId('templatePalette');
+            const editor = byId('templateEditor');
+            const title = byId('templatePopupTitle');
+            const hint = byId('templatePopupHint');
+            if (!editor) return;
+
+            stopTemplatePreviewTimer();
+            telemetryTemplateState = {
+                template,
+                data: cloneTemplateData(template.data),
+                frame: 0,
+                animate: false
+            };
+            activeTemplate = template;
+
+            if (palette) palette.classList.add('hidden');
+            editor.classList.remove('hidden');
+            editor.textContent = '';
+            if (title) title.textContent = `Template Editor // ${template.label}`;
+            if (hint) hint.textContent = 'Edit fields and sliders. Preview animation is editor-only; inserted output is plain static text.';
+
+            const fields = document.createElement('div');
+            fields.className = 'template-fieldset';
+            const fieldsTitle = document.createElement('div');
+            fieldsTitle.className = 'template-fieldset-title';
+            fieldsTitle.textContent = 'Editable template data';
+            fields.appendChild(fieldsTitle);
+            (template.fields || []).forEach(field => fields.appendChild(createTemplateFieldControl(field)));
+
+            if (template.supportsPreviewAnimation) {
+                const check = document.createElement('label');
+                check.className = 'template-check';
+                const checkbox = document.createElement('input');
+                checkbox.id = 'templateAnimatePreview';
+                checkbox.type = 'checkbox';
+                checkbox.disabled = Boolean(templateReducedMotion?.matches);
+                checkbox.addEventListener('change', () => {
+                    telemetryTemplateState.animate = checkbox.checked;
+                    startTemplatePreviewTimer();
+                });
+                check.append(checkbox, document.createTextNode(templateReducedMotion?.matches ? 'Animate Preview disabled by reduced motion' : 'Animate Preview'));
+                fields.appendChild(check);
+            }
+
+            const valueControls = document.createElement('div');
+            valueControls.id = 'templateValueControls';
+            valueControls.className = 'template-value-controls hidden';
+
+            const previewLabel = document.createElement('div');
+            previewLabel.className = 'template-title';
+            previewLabel.textContent = 'Live ASCII Preview';
+            const preview = document.createElement('pre');
+            preview.id = 'templateEditPreview';
+            preview.className = 'template-preview';
+
+            const actions = document.createElement('div');
+            actions.className = 'template-editor-actions';
+            const insert = document.createElement('button');
+            insert.type = 'button';
+            insert.textContent = '[ INSERT CURRENT FRAME ]';
+            insert.addEventListener('click', () => {
+                insertTemplateOutput(
+                    buildTemplateOutput(telemetryTemplateState.template, telemetryTemplateState.data, telemetryTemplateState.frame),
+                    telemetryTemplateState.template.label
+                );
+            });
+            const back = document.createElement('button');
+            back.type = 'button';
+            back.textContent = '[ BACK ]';
+            back.addEventListener('click', showTemplatePalette);
+            actions.append(insert, back);
+
+            editor.append(fields, valueControls, previewLabel, preview, actions);
+            renderSchemaValueControls();
+            updateTemplateEditorPreview();
+            editor.querySelector('input, textarea, select')?.focus();
+        }
+
+        function renderTemplatePalette() {
+            const host = byId('templatePalette');
+            if (!host) return;
+            host.textContent = '';
+            const groups = MESSAGE_TEMPLATES.reduce((map, template) => {
+                const group = template.group || 'Other';
+                if (!map.has(group)) map.set(group, []);
+                map.get(group).push(template);
+                return map;
+            }, new Map());
+
+            groups.forEach((templates, groupName) => {
+                const groupEl = document.createElement('section');
+                groupEl.className = 'template-group';
+
+                const title = document.createElement('div');
+                title.className = 'template-title';
+                title.textContent = groupName;
+
+                const buttons = document.createElement('div');
+                buttons.className = 'template-buttons';
+                templates.forEach(template => {
                     const button = document.createElement('button');
                     button.className = 'template-btn';
                     button.type = 'button';

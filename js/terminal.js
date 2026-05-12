@@ -476,6 +476,7 @@ let outputRenderFrame = null;
 let typewriterFrame = null;
 let bufferRecalcPending = false;
 let bufferRecalcFrame = null;
+let terminalRuntimeSuspendedForMap = false;
 let outputGroupCounter = 0;
 let lastTypewriterClickAt = 0;
 const COMMAND_PROMPT = 'ARES>';
@@ -490,6 +491,40 @@ function setTerminalTypingState(active) {
     if (document.body) {
         document.body.classList.toggle('terminal-typing', isTyping && !prefersReducedMotion);
     }
+}
+
+function suspendTerminalRuntimeForMap() {
+    terminalRuntimeSuspendedForMap = true;
+    stopShellTelemetry();
+    if (hologramStartTimer) {
+        clearTimeout(hologramStartTimer);
+        hologramStartTimer = null;
+    }
+    if (outputRenderFrame) {
+        cancelAnimationFrame(outputRenderFrame);
+        outputRenderFrame = null;
+    }
+    if (typewriterFrame) {
+        cancelAnimationFrame(typewriterFrame);
+        typewriterFrame = null;
+    }
+    if (bufferRecalcFrame) {
+        cancelAnimationFrame(bufferRecalcFrame);
+        bufferRecalcFrame = null;
+    }
+    typewriterRunId++;
+    setTerminalTypingState(false);
+}
+
+function resumeTerminalRuntimeAfterMap() {
+    terminalRuntimeSuspendedForMap = false;
+    startShellTelemetry();
+    updatePageIndicator();
+    if (typewriterQueue.length && !isTyping) {
+        typewriterRunId++;
+        processTypewriterQueue(typewriterRunId);
+    }
+    scheduleHologramStart(240);
 }
 
 function scrollTranscriptToBottom() {
@@ -529,7 +564,7 @@ function enqueueOutputLine(text, className = '', options = {}) {
 
     typewriterQueue.push({ text: line.text, className: line.className });
     updatePageIndicator();
-    if (!isTyping) {
+    if (!isTyping && !terminalRuntimeSuspendedForMap) {
         typewriterRunId++;
         processTypewriterQueue(typewriterRunId);
     }
@@ -729,6 +764,11 @@ function renderCurrentPage() {
 
 function processTypewriterQueue(runId = typewriterRunId) {
     if (runId !== typewriterRunId) return;
+    if (terminalRuntimeSuspendedForMap) {
+        setTerminalTypingState(false);
+        typewriterFrame = null;
+        return;
+    }
     if (typewriterQueue.length === 0) {
         setTerminalTypingState(false);
         typewriterFrame = null;
@@ -1321,7 +1361,7 @@ function registerTerminalCommands() {
         name: 'facility status',
         aliases: ['facility', 'map', 'status facility'],
         usage: 'FACILITY STATUS',
-        description: 'Open abstract wireframe facility overview.',
+        description: 'Open lazy-loaded Black Desert tactical map.',
         run: () => showFacilityStatus()
     });
     registerCommand({

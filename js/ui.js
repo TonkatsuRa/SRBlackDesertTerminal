@@ -1428,6 +1428,11 @@ function initHologram() {
             queueHologramFrame(600);
             return;
         }
+        if (document.body.classList.contains('terminal-map-active')) {
+            lastFrameTime = 0;
+            queueHologramFrame(3000);
+            return;
+        }
         if (width <= 0 || height <= 0) {
             resize();
             lastFrameTime = 0;

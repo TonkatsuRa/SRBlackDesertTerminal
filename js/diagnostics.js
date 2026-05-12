@@ -398,12 +398,19 @@ function refreshStatusPanels() {
     }
     if (facilityActive) {
         facilityFrame = Math.max(facilityFrame, prefersReducedMotion ? 24 : 10);
-        renderFacilityStatus(performance.now());
+        if (window.MapOverlayController?.isActive()) {
+            window.MapOverlayController.refreshProfile();
+        } else {
+            renderFacilityStatus(performance.now());
+        }
     }
 }
 
 function pauseRealtimePanels() {
     stopSideTelemetryLoop();
+    if (window.MapOverlayController?.isActive()) {
+        window.MapOverlayController.pause();
+    }
     if (diagnosticAnimFrame) {
         cancelAnimationFrame(diagnosticAnimFrame);
         diagnosticAnimFrame = null;
@@ -416,12 +423,15 @@ function pauseRealtimePanels() {
 
 function resumeRealtimePanels() {
     if (prefersReducedMotion || !AppState.networkOnline) return;
-    startSideTelemetryLoop();
+    const mapActive = window.MapOverlayController?.isActive();
+    if (!mapActive) startSideTelemetryLoop();
     if (diagnosticActive && !diagnosticAnimFrame) {
         diagnosticLastRender = 0;
         diagnosticAnimFrame = requestAnimationFrame(runDiagnosticLoop);
     }
-    if (facilityActive && !facilityAnimFrame && !(typeof safeModeActive === 'function' && safeModeActive())) {
+    if (facilityActive && mapActive) {
+        window.MapOverlayController.resume();
+    } else if (facilityActive && !facilityAnimFrame && !(typeof safeModeActive === 'function' && safeModeActive())) {
         facilityLastRender = 0;
         facilityAnimFrame = requestAnimationFrame(runFacilityLoop);
     }
@@ -3104,11 +3114,23 @@ function showFacilityStatus() {
     facilityLastRender = 0;
     overlay.classList.add('active');
     overlay.setAttribute('aria-hidden', 'false');
-    renderFacilityStatus(performance.now());
     AudioEngine.bootBeep();
-    Animator.dialogOpen(overlay);
-    if (!prefersReducedMotion && !(typeof safeModeActive === 'function' && safeModeActive())) {
-        facilityAnimFrame = requestAnimationFrame(runFacilityLoop);
+    if (window.MapOverlayController) {
+        // The tactical map is a WebGL iframe. Keep its parent untransformed;
+        // GSAP dialog transforms on iframe ancestors can make the map stutter.
+        const panel = overlay.querySelector('.facility-panel');
+        if (panel) {
+            panel.style.opacity = '';
+            panel.style.transform = 'none';
+            panel.style.willChange = 'auto';
+        }
+        window.MapOverlayController.open({ trigger: document.activeElement });
+    } else {
+        Animator.dialogOpen(overlay);
+        renderFacilityStatus(performance.now());
+        if (!prefersReducedMotion && !(typeof safeModeActive === 'function' && safeModeActive())) {
+            facilityAnimFrame = requestAnimationFrame(runFacilityLoop);
+        }
     }
 }
 
@@ -3121,6 +3143,7 @@ function closeFacilityStatus() {
         cancelAnimationFrame(facilityAnimFrame);
         facilityAnimFrame = null;
     }
+    window.MapOverlayController?.close({ restoreFocus: false });
     AudioEngine.pageFlip();
     Animator.dialogClose(overlay, () => {
         overlay.classList.remove('active');
@@ -3153,6 +3176,7 @@ function getDiagnosticPerformanceSnapshot() {
         documentHidden: document.hidden,
         diagnosticLoop: Boolean(diagnosticAnimFrame),
         facilityLoop: Boolean(facilityAnimFrame),
+        facilityMap: window.MapOverlayController?.getSnapshot?.() || null,
         sideLoop: Boolean(sideTelemetryAnimFrame),
         schedulerMs: profile.schedulerMs,
         facilityMs: profile.facilityMs,
@@ -3312,6 +3336,7 @@ function forceCloseRuntimeOverlays() {
         cancelAnimationFrame(facilityAnimFrame);
         facilityAnimFrame = null;
     }
+    window.MapOverlayController?.close({ restoreFocus: false });
     if (facilityOverlay) {
         facilityOverlay.classList.remove('active');
         facilityOverlay.setAttribute('aria-hidden', 'true');

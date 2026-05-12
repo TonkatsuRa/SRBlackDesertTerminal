@@ -98,59 +98,39 @@
 
     <!-- Facility Status -->
     <div class="facility-overlay" id="facilityOverlay" aria-hidden="true">
-        <div class="facility-panel glow" role="dialog" aria-modal="true" aria-labelledby="facilityTitle">
+        <div class="facility-panel facility-map-panel glow" role="dialog" aria-modal="true" aria-labelledby="facilityTitle">
             <div class="facility-header">
                 <div>
                     <div class="facility-title glow" id="facilityTitle">FACILITY STATUS</div>
-                    <div class="facility-meta" id="facilityMeta">WIREFRAME BUS: STANDBY</div>
+                    <div class="facility-meta" id="facilityMeta">TACTICAL MAP BUS: STANDBY</div>
                 </div>
-                <button class="facility-close glow" id="facilityClose" type="button">[ CLOSE ]</button>
+                <button class="facility-close glow" id="facilityClose" type="button">[ BACK TO TERMINAL ]</button>
             </div>
-            <div class="facility-layout">
-                <div class="facility-map-wrap">
-                    <canvas id="facilityAtmosphereCanvas" class="facility-atmosphere-canvas" aria-hidden="true"></canvas>
-                    <div id="facilityCanvas" class="facility-svg-host" role="img" aria-label="SVG facility command center map"></div>
-                    <div class="facility-map-hud">
-                        <span>ARES COMMAND CENTER // BDR-01</span>
-                        <span id="facilityScanStatus">MAP READY</span>
+            <div class="facility-map-shell" aria-live="polite">
+                <div class="facility-map-loader" id="facilityMapLoader" role="status">
+                    <div class="facility-loader-logo">ARES // BLACK DESERT</div>
+                    <div class="facility-loader-title">TACTICAL MAP RUNTIME</div>
+                    <div class="facility-loader-bar" aria-hidden="true">
+                        <span id="facilityMapLoaderFill"></span>
                     </div>
+                    <div class="facility-loader-text" id="facilityMapLoaderText">TACTICAL MAP BUS: STANDBY</div>
                 </div>
-                <div class="facility-sidebar">
-                    <div class="facility-card">
-                        <div class="facility-card-title">POWER GRID</div>
-                        <pre class="facility-readout" id="facilityOverview"></pre>
-                    </div>
-                    <div class="facility-card">
-                        <div class="facility-card-title">LIFE SUPPORT</div>
-                        <pre class="facility-readout" id="facilityLifeSupport"></pre>
-                    </div>
-                    <div class="facility-card">
-                        <div class="facility-card-title">SECURITY</div>
-                        <pre class="facility-readout" id="facilityZones"></pre>
-                    </div>
-                    <div class="facility-card">
-                        <div class="facility-card-title">CONTAINMENT</div>
-                        <pre class="facility-readout" id="facilityContainment"></pre>
-                    </div>
-                    <div class="facility-card">
-                        <div class="facility-card-title">UPLINK</div>
-                        <pre class="facility-readout" id="facilityUplink"></pre>
-                    </div>
-                    <div class="facility-card">
-                        <div class="facility-card-title">UNKNOWN CONTACTS</div>
-                        <pre class="facility-readout" id="facilityContacts"></pre>
-                    </div>
+                <div class="facility-map-frame-wrap" id="facilityMapFrameWrap" hidden></div>
+                <div class="facility-legacy-readouts" aria-hidden="true">
+                    <canvas id="facilityAtmosphereCanvas" class="facility-atmosphere-canvas"></canvas>
+                    <div id="facilityCanvas" class="facility-svg-host" role="img" aria-label="Legacy SVG facility command center map"></div>
+                    <span id="facilityScanStatus">MAP STANDBY</span>
+                    <pre id="facilityOverview"></pre>
+                    <pre id="facilityLifeSupport"></pre>
+                    <pre id="facilityZones"></pre>
+                    <pre id="facilityContainment"></pre>
+                    <pre id="facilityUplink"></pre>
+                    <pre id="facilityContacts"></pre>
+                    <div id="facilityTelemetryStrip"></div>
                 </div>
-            </div>
-            <div class="facility-telemetry-strip" id="facilityTelemetryStrip">
-                <span>STRUCTURE --</span>
-                <span>POWER --</span>
-                <span>RESERVE --</span>
-                <span>FAULTS --</span>
-                <span>BIO --</span>
             </div>
             <div class="facility-footer">
-                <span id="facilityTicker">FACILITY GRID WAITING</span>
+                <span id="facilityTicker">TACTICAL MAP WAITING</span>
                 <span>[ ESC CLOSE ]</span>
             </div>
         </div>
@@ -372,6 +352,7 @@
     <script src="js/database.js" defer></script>
     <script src="js/boot.js" defer></script>
     <script src="js/terminal.js" defer></script>
+    <script src="js/map-overlay.js" defer></script>
     <script src="js/diagnostics.js" defer></script>
     <script src="js/ui.js" defer></script>
     <script src="js/main.js" defer></script>
