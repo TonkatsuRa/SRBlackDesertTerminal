@@ -241,12 +241,42 @@
   </div>
 </div>
 
+<script src="js/tool-screen-bridge.js"></script>
+<script>
+  if (window.parent === window) {
+    window.ToolScreenBridge?.installToolPage?.({
+      tool: "facility",
+      beforeReturn: () => window.AresFacilityMap?.dispose?.()
+    });
+  }
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
 <script>
 (() => {
   "use strict";
+
+  if (!window.THREE) {
+    const loader = document.getElementById("loader");
+    if (loader) {
+      loader.innerHTML = "<div>MAP RUNTIME UNAVAILABLE</div><div>THREE.JS COULD NOT BE LOADED</div>";
+    }
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({
+        source: "ARES_MAP",
+        type: "ARES_MAP_ERROR",
+        payload: { message: "THREE.JS RUNTIME UNAVAILABLE" }
+      }, "*");
+    }
+    window.AresFacilityMap = {
+      dispose() {},
+      pause() {},
+      resume() {},
+      applyProfile() {}
+    };
+    return;
+  }
 
   const IS_FIREFOX = /firefox/i.test(navigator.userAgent);
   const IS_MOBILE = window.matchMedia("(max-width: 820px), (pointer: coarse)").matches;
@@ -385,7 +415,12 @@
   }
 
   function handleMapKeydown(event) {
-    if (event.key === "Escape") postMapMessage("ARES_MAP_CLOSE_REQUEST", {});
+    if (event.key !== "Escape") return;
+    if (window.parent && window.parent !== window) {
+      postMapMessage("ARES_MAP_CLOSE_REQUEST", {});
+      return;
+    }
+    window.ToolScreenBridge?.returnToTerminal?.("facility", { beforeReturn: disposeMap });
   }
 
   window.addEventListener("message", handleMapMessage);
@@ -2208,6 +2243,14 @@
     renderer.render(scene, camera);
     if (!mapProfile.staticRender) requestMapFrame();
   }
+
+  window.AresFacilityMap = {
+    dispose: disposeMap,
+    pause: () => setMapPaused(true),
+    resume: () => setMapPaused(false),
+    applyProfile: applyMapProfile
+  };
+
 })();
 </script>
 </body>

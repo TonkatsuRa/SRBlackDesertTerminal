@@ -1,7 +1,7 @@
 // ========================================
 // INITIALIZATION
 // ========================================
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     initializeSafeModeFromUrl();
     EffectsController.load();
     applyMotionPreference();
@@ -15,8 +15,22 @@ document.addEventListener('DOMContentLoaded', () => {
     syncAppStateFromLegacy({ resetSelection: false });
     calculateLinesPerPage();
     loadStoredStatusProfile();
-    loadTerminalContent().finally(() => {
-        startBootSequence();
+    const restoreRequest = window.TerminalSessionRestore?.parseRestoreRequest?.();
+    let restoreSnapshot = null;
+    if (window.TerminalSessionRestore?.cleanupExpiredSnapshots) {
+        window.TerminalSessionRestore.cleanupExpiredSnapshots();
+    }
+    try {
+        await loadTerminalContent();
+        if (restoreRequest?.session && window.TerminalSessionRestore?.consumeSnapshot) {
+            restoreSnapshot = await window.TerminalSessionRestore.consumeSnapshot(restoreRequest.session);
+        }
+    } catch (error) {
+        restoreSnapshot = null;
+    }
+    startBootSequence({
+        restoreSnapshot,
+        restoredFrom: restoreRequest?.from || ''
     });
     
     document.getElementById('fileInput').addEventListener('change', handleFileSelect);

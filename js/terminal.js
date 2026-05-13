@@ -12,11 +12,14 @@ function scheduleHologramStart(delay = 0) {
     }, Math.max(0, delay));
 }
 
-function initTerminal() {
+function initTerminal(options = {}) {
     terminalShutdownActive = false;
     setSystemStatusVisual(true);
     clearOutput({ force: true });
-    showWelcome();
+    const restored = Boolean(options.restoreSnapshot && window.TerminalSessionRestore?.applySnapshot?.(options.restoreSnapshot, {
+        restoredFrom: options.restoredFrom || ''
+    }));
+    if (!restored) showWelcome();
     scheduleHologramStart(180);
     updateMenuSelection();
     updateDatabaseSlotIndicators();

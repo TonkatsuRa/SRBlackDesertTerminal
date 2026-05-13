@@ -293,7 +293,9 @@ function applyMotionPreference(matches = reducedMotionQuery.matches) {
     TYPEWRITER_CONFIG.terminalMaxCharsPerFrame = prefersReducedMotion ? 1 : 3;
     TYPEWRITER_CONFIG.lineDelay = prefersReducedMotion ? 0 : 0;
     EffectsController.apply();
-    setTerminalTypingState(typeof isTyping === 'boolean' ? isTyping : false);
+    if (typeof setTerminalTypingState === 'function') {
+        setTerminalTypingState(typeof isTyping === 'boolean' ? isTyping : false);
+    }
 
     if (prefersReducedMotion) {
         pauseRealtimePanels();

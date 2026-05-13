@@ -2565,6 +2565,10 @@ function showDiagnosticDashboard() {
         printNetworkUnavailable('DIAGNOSTIC');
         return;
     }
+    if (window.TerminalSessionRestore?.openTool) {
+        window.TerminalSessionRestore.openTool('diagnostic', 'diagnostics-screen.html');
+        return;
+    }
     const overlay = document.getElementById('diagnosticOverlay');
     if (!overlay || overlay.classList.contains('active')) return;
     diagnosticActive = true;
@@ -3104,6 +3108,10 @@ function runFacilityLoop(timestamp = 0) {
 function showFacilityStatus() {
     if (!AppState.networkOnline) {
         printNetworkUnavailable('FACILITY STATUS');
+        return;
+    }
+    if (window.TerminalSessionRestore?.openTool) {
+        window.TerminalSessionRestore.openTool('facility', 'facility-map.html');
         return;
     }
     const overlay = document.getElementById('facilityOverlay');

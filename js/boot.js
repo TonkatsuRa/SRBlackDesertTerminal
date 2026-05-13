@@ -189,7 +189,9 @@ function calculateLinesPerPage() {
 // ========================================
 // BOOT SEQUENCE
 // ========================================
-function startBootSequence() {
+function startBootSequence(options = {}) {
+    const restoreSnapshot = options.restoreSnapshot || null;
+    const restoredFrom = options.restoredFrom || '';
     const bootOutput = document.getElementById('bootOutput');
     const bootLogo = document.getElementById('bootLogo');
     const bootScreen = document.getElementById('bootScreen');
@@ -258,6 +260,22 @@ function startBootSequence() {
             bootScreen.classList.add('hidden');
             if (shouldInitTerminal) initTerminal();
         });
+    }
+
+    function finishRestoreBoot() {
+        if (bootComplete) return;
+        bootComplete = true;
+        cleanupBootListeners();
+        terminalStarted = true;
+        const terminal = document.querySelector('.screen-content');
+        if (terminal) {
+            terminal.style.opacity = '';
+            terminal.style.transform = '';
+        }
+        document.body.classList.add('terminal-ready');
+        bootScreen.classList.add('hidden');
+        bootScreen.classList.remove('boot-fading', 'boot-blackout', 'boot-log-mode');
+        initTerminal({ restoreSnapshot, restoredFrom });
     }
 
     function handleBootSkip(e) {
@@ -594,6 +612,11 @@ function bootStatusClass(status) {
     if (bootLeft) {
         bootLeft.style.opacity = '';
         bootLeft.style.transform = '';
+    }
+
+    if (restoreSnapshot) {
+        finishRestoreBoot();
+        return;
     }
 
     if (bootSkip) {

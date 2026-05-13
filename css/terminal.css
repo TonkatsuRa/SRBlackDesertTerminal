@@ -1315,3 +1315,97 @@ body.terminal-map-active .facility-map-panel .facility-close {
     }
 }
 
+/* Full-page tool transfer and diagnostic screen shell. */
+.tool-transfer-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: grid;
+    place-items: center;
+    background: #000;
+    color: var(--amber);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 180ms ease;
+}
+
+.tool-transfer-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.tool-transfer-panel {
+    width: min(520px, calc(100vw - 40px));
+    border: 1px solid rgba(255, 176, 0, 0.58);
+    background: rgba(7, 6, 2, 0.92);
+    padding: 26px;
+    box-shadow: 0 0 28px rgba(255, 176, 0, 0.14), inset 0 0 24px rgba(255, 176, 0, 0.06);
+}
+
+.tool-transfer-brand {
+    color: var(--cyan);
+    font-size: var(--font-size-small);
+    letter-spacing: 0.14em;
+    margin-bottom: 16px;
+}
+
+.tool-transfer-text {
+    color: var(--amber);
+    font-size: var(--font-size-base);
+}
+
+.tool-transfer-subtext {
+    color: var(--green-dim);
+    font-size: var(--font-size-small);
+}
+
+.tool-transfer-bar {
+    height: 9px;
+    margin: 18px 0 12px;
+    border: 1px solid rgba(57, 255, 20, 0.38);
+    background: rgba(57, 255, 20, 0.08);
+    overflow: hidden;
+}
+
+.tool-transfer-bar span {
+    display: block;
+    width: 100%;
+    height: 100%;
+    transform-origin: left center;
+    background: linear-gradient(90deg, var(--green), var(--cyan), var(--amber));
+    animation: tool-transfer-fill 560ms ease forwards;
+}
+
+@keyframes tool-transfer-fill {
+    from { transform: scaleX(0.08); }
+    to { transform: scaleX(1); }
+}
+
+.diagnostic-screen-page {
+    min-height: 100vh;
+    overflow: hidden;
+    background: #020403;
+}
+
+.diagnostic-screen-page .diagnostic-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    padding: clamp(8px, 1.2vw, 16px);
+    background: radial-gradient(circle at 50% 38%, rgba(32, 194, 14, 0.08), transparent 56%), #020403;
+}
+
+.diagnostic-screen-page .diagnostic-panel {
+    width: 100%;
+    max-width: none;
+    height: calc(var(--viewport-height, 100vh) - clamp(16px, 2.4vw, 32px));
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tool-transfer-overlay,
+    .tool-transfer-bar span {
+        transition: none;
+        animation: none;
+    }
+}
+
