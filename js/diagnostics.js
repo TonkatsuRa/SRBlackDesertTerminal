@@ -597,6 +597,567 @@ function svgElement(name, attributes = {}) {
     return element;
 }
 
+function ensureSvgDefs(svg) {
+    if (!svg) return null;
+    let defs = svg.querySelector('defs');
+    if (!defs) {
+        defs = svgElement('defs');
+        svg.prepend(defs);
+    }
+    return defs;
+}
+
+const TELEMETRY_FILTER_COLORS = {
+    cyan: [0.0, 1.0, 0.84],
+    green: [0.22, 1.0, 0.08],
+    amber: [1.0, 0.68, 0.0],
+    red: [1.0, 0.2, 0.2]
+};
+
+function ensureTelemetryColorFilter(widget, colorName = 'cyan') {
+    const color = TELEMETRY_FILTER_COLORS[colorName] || TELEMETRY_FILTER_COLORS.cyan;
+    const id = `telemetry-color-${colorName}`;
+    const defs = ensureSvgDefs(widget.svg);
+    if (!defs || defs.querySelector(`#${id}`)) return id;
+    const filter = svgElement('filter', {
+        id,
+        x: '-10%',
+        y: '-10%',
+        width: '120%',
+        height: '120%',
+        'color-interpolation-filters': 'sRGB'
+    });
+    filter.appendChild(svgElement('feColorMatrix', {
+        type: 'matrix',
+        values: `0 0 0 0 ${color[0]} 0 0 0 0 ${color[1]} 0 0 0 0 ${color[2]} 0 0 0 1 0`
+    }));
+    defs.appendChild(filter);
+    return id;
+}
+
+const DIAGNOSTIC_VITAL_SUBJECTS = [
+    { id: 'BD-01', name: 'KRAUSS', state: 'healthy', status: 'STABLE', theme: 'green', hr: 72, resp: 14, o2: 98, bp: '118/76', neural: '4.8 mV', coher: 91, stress: 18, cort: 22, temp: '36.8C', motion: 1.0 },
+    { id: 'BD-02', name: 'MORI', state: 'sleeping', status: 'SLEEP', theme: 'cyan', hr: 51, resp: 9, o2: 97, bp: '102/64', neural: '2.1 mV', coher: 76, stress: 8, cort: 13, temp: '36.1C', motion: 0.48 },
+    { id: 'BD-03', name: 'HALE', state: 'sick', status: 'FEBRILE', theme: 'amber', hr: 104, resp: 21, o2: 92, bp: '134/82', neural: '3.6 mV', coher: 58, stress: 64, cort: 71, temp: '39.2C', motion: 1.18 },
+    { id: 'BD-04', name: 'ITO', state: 'critical', status: 'CRITICAL', theme: 'red', hr: 138, resp: 29, o2: 82, bp: '88/52', neural: '1.2 mV', coher: 31, stress: 91, cort: 94, temp: '40.1C', motion: 1.45 },
+    { id: 'BD-05', name: 'VANCE', state: 'dead', status: 'NO VITALS', theme: 'red', hr: 0, resp: 0, o2: 0, bp: '0/0', neural: '0.0 mV', coher: 0, stress: 0, cort: 0, temp: '31.4C', motion: 0.03 },
+    { id: 'BD-06', name: 'SATO', state: 'sedated', status: 'SEDATED', theme: 'cyan', hr: 46, resp: 7, o2: 95, bp: '96/58', neural: '1.8 mV', coher: 68, stress: 11, cort: 9, temp: '35.9C', motion: 0.38 },
+    { id: 'BD-07', name: 'OKAFOR', state: 'healthy', status: 'STABLE', theme: 'green', hr: 81, resp: 16, o2: 99, bp: '124/79', neural: '5.1 mV', coher: 88, stress: 27, cort: 30, temp: '37.0C', motion: 1.05 },
+    { id: 'BD-08', name: 'REYES', state: 'injured', status: 'TRAUMA', theme: 'amber', hr: 118, resp: 24, o2: 89, bp: '142/86', neural: '3.0 mV', coher: 49, stress: 83, cort: 87, temp: '37.8C', motion: 1.28 },
+    { id: 'BD-09', name: 'DAHL', state: 'unknown', status: 'ARTIFACT', theme: 'amber', hr: 64, resp: 13, o2: 91, bp: '--/--', neural: 'ERR', coher: 22, stress: 70, cort: 58, temp: '??.?C', motion: 0.82 },
+    { id: 'BD-10', name: 'KIM', state: 'sleeping', status: 'REM', theme: 'cyan', hr: 58, resp: 11, o2: 96, bp: '108/69', neural: '6.4 mV', coher: 73, stress: 21, cort: 17, temp: '36.4C', motion: 0.58 },
+    { id: 'BD-11', name: 'MERTZ', state: 'sick', status: 'HYPOXIA', theme: 'amber', hr: 96, resp: 26, o2: 84, bp: '128/80', neural: '2.7 mV', coher: 46, stress: 67, cort: 73, temp: '38.6C', motion: 1.08 },
+    { id: 'BD-12', name: 'VASQUEZ', state: 'critical', status: 'SHOCK', theme: 'red', hr: 152, resp: 32, o2: 76, bp: '74/41', neural: '0.9 mV', coher: 18, stress: 96, cort: 99, temp: '35.2C', motion: 1.55 },
+    { id: 'BD-13', name: 'ELIAS', state: 'dead', status: 'FLATLINE', theme: 'red', hr: 0, resp: 0, o2: 0, bp: '0/0', neural: '0.0 mV', coher: 0, stress: 0, cort: 0, temp: '29.9C', motion: 0.02 },
+    { id: 'BD-14', name: 'PARK', state: 'healthy', status: 'STABLE', theme: 'green', hr: 68, resp: 15, o2: 98, bp: '116/72', neural: '4.2 mV', coher: 86, stress: 24, cort: 25, temp: '36.7C', motion: 0.96 },
+    { id: 'BD-15', name: 'NADIR', state: 'anomalous', status: 'ANOMALOUS', theme: 'red', hr: 41, resp: 5, o2: 88, bp: '160/40', neural: '9.9 mV', coher: 7, stress: 100, cort: 100, temp: '34.0C', motion: 1.72 },
+    { id: 'BD-16', name: 'CHEN', state: 'recovering', status: 'WATCH', theme: 'amber', hr: 89, resp: 18, o2: 94, bp: '122/78', neural: '3.9 mV', coher: 63, stress: 45, cort: 39, temp: '37.4C', motion: 0.9 }
+];
+
+let diagnosticVitalsSubjectIndex = 0;
+
+function selectedDiagnosticVitalSubject() {
+    return DIAGNOSTIC_VITAL_SUBJECTS[diagnosticVitalsSubjectIndex] || DIAGNOSTIC_VITAL_SUBJECTS[0];
+}
+
+function setDiagnosticVitalsSubject(delta) {
+    const count = DIAGNOSTIC_VITAL_SUBJECTS.length;
+    diagnosticVitalsSubjectIndex = (diagnosticVitalsSubjectIndex + delta + count) % count;
+    resetDiagnosticWidgetRegistry();
+    renderDiagnosticDashboard(performance.now(), { force: true });
+}
+
+function bindDiagnosticVitalsControls() {
+    if (document.documentElement.dataset.diagnosticVitalsBound === 'true') return;
+    document.documentElement.dataset.diagnosticVitalsBound = 'true';
+    document.addEventListener('click', event => {
+        const button = event.target.closest?.('#diagVitalsPrev, #diagVitalsNext');
+        if (!button) return;
+        event.preventDefault();
+        event.stopPropagation();
+        setDiagnosticVitalsSubject(button.id === 'diagVitalsPrev' ? -1 : 1);
+    });
+}
+
+function bodyCardioImageBox(widget) {
+    const container = {
+        x: 2.05 * widget.cellWidth,
+        y: 3.25 * widget.cellHeight,
+        width: 14.1 * widget.cellWidth,
+        height: 15.95 * widget.cellHeight
+    };
+    const assetAspect = 90 / 180;
+    const containerAspect = container.width / container.height;
+    let width = container.width;
+    let height = container.height;
+    let x = container.x;
+    let y = container.y;
+    if (containerAspect > assetAspect) {
+        width = height * assetAspect;
+        x += (container.width - width) / 2;
+    } else {
+        height = width / assetAspect;
+        y += (container.height - height) / 2;
+    }
+    return { ...container, renderX: x, renderY: y, renderWidth: width, renderHeight: height };
+}
+
+const BODY_CARDIO_REGION_SHAPES = {
+    head: { type: 'ellipse', cx: 45, cy: 13.4, rx: 8.6, ry: 11.8 },
+    torso: {
+        type: 'path',
+        d: 'M32 30 C38 27 52 27 58 30 C63 43 65 57 63 71 C60 87 54 102 50 112 C48 116 42 116 40 112 C35 101 30 87 27 71 C25 57 27 43 32 30 Z'
+    },
+    leftArm: {
+        type: 'path',
+        d: 'M29 31 C20 36 18 48 20 63 C19 73 15 84 10 91 C8 95 12 100 17 96 C23 87 27 76 29 65 C33 51 34 39 29 31 Z'
+    },
+    rightArm: {
+        type: 'path',
+        d: 'M61 31 C70 36 72 48 70 63 C71 73 75 84 80 91 C82 95 78 100 73 96 C67 87 63 76 61 65 C57 51 56 39 61 31 Z'
+    },
+    leftLeg: {
+        type: 'path',
+        d: 'M34 88 C38 104 39 128 35 153 C34 164 30 174 27 178 C32 181 37 177 39 168 C43 145 46 115 45 94 Z'
+    },
+    rightLeg: {
+        type: 'path',
+        d: 'M56 88 C52 104 51 128 55 153 C56 164 60 174 63 178 C58 181 53 177 51 168 C47 145 44 115 45 94 Z'
+    }
+};
+
+function appendBodyRegionShape(layer, shape, status) {
+    const colors = bodyRegionColor(status);
+    const common = {
+        fill: colors.fill,
+        stroke: colors.stroke,
+        'stroke-width': status === 'missing' ? 1.4 : 1.05,
+        opacity: status === 'healthy' ? 0.78 : 0.88,
+        'vector-effect': 'non-scaling-stroke',
+        'shape-rendering': 'geometricPrecision'
+    };
+    if (status === 'missing') common['stroke-dasharray'] = '4 3';
+    if (shape.type === 'ellipse') {
+        layer.appendChild(svgElement('ellipse', { ...common, cx: shape.cx, cy: shape.cy, rx: shape.rx, ry: shape.ry }));
+    } else {
+        layer.appendChild(svgElement('path', { ...common, d: shape.d }));
+    }
+}
+
+function renderBodyCardioAsset(widget, subject, frame) {
+    const regions = subjectBodyRegions(subject);
+    const colorName = subject.theme || 'cyan';
+    const pulse = subject.state === 'dead' || prefersReducedMotion ? 0 : Math.sin(frame * 0.18) * 0.06;
+    const box = bodyCardioImageBox(widget);
+    const regionGroup = svgElement('g', {
+        transform: `translate(${box.renderX.toFixed(2)} ${box.renderY.toFixed(2)}) scale(${(box.renderWidth / 90).toFixed(4)} ${(box.renderHeight / 180).toFixed(4)})`,
+        opacity: subject.state === 'dead' ? 0.72 : 1
+    });
+    Object.entries(BODY_CARDIO_REGION_SHAPES).forEach(([key, shape]) => {
+        appendBodyRegionShape(regionGroup, shape, regions[key] || 'healthy');
+    });
+    widget.glyphLayer.appendChild(regionGroup);
+
+    const bodyImage = svgElement('image', {
+        href: 'assets/body-cardio.svg',
+        x: box.x,
+        y: box.y,
+        width: box.width,
+        height: box.height,
+        preserveAspectRatio: 'xMidYMid meet',
+        opacity: (subject.state === 'dead' ? 0.54 : 0.88) + pulse
+    });
+    widget.glyphLayer.appendChild(bodyImage);
+
+    const heartPulse = subject.hr > 0 && !prefersReducedMotion ? 0.58 + Math.sin(frame * 0.32 * Math.max(0.25, subject.motion || 1)) * 0.24 : 0.34;
+    widget.glyphLayer.appendChild(svgElement(subject.hr > 0 ? 'circle' : 'rect', subject.hr > 0 ? {
+        cx: box.renderX + box.renderWidth * 0.54,
+        cy: box.renderY + box.renderHeight * 0.245,
+        r: 2.6 + heartPulse * 1.6,
+        fill: subject.state === 'dead' ? 'rgba(255,51,51,0.28)' : 'rgba(255,51,51,0.58)',
+        stroke: 'rgba(255,51,51,0.86)',
+        'stroke-width': 0.9,
+        opacity: heartPulse
+    } : {
+        x: box.renderX + box.renderWidth * 0.48,
+        y: box.renderY + box.renderHeight * 0.225,
+        width: 7,
+        height: 7,
+        fill: 'rgba(255,51,51,0.22)',
+        stroke: 'rgba(255,51,51,0.62)',
+        'stroke-width': 0.8,
+        opacity: 0.5
+    }));
+
+    const regionLegend = [
+        ['HD', 'head', 2.2, 20.15],
+        ['TR', 'torso', 6.9, 20.15],
+        ['LA', 'leftArm', 11.4, 20.15],
+        ['RA', 'rightArm', 2.2, 21.55],
+        ['LL', 'leftLeg', 6.9, 21.55],
+        ['RL', 'rightLeg', 11.4, 21.55]
+    ];
+    regionLegend.forEach(([label, key, col, row]) => {
+        const status = regions[key] || 'healthy';
+        svgLabel(widget.labelLayer, `${label}:${bodyRegionShortStatus(status)}`, col, row, {
+            className: bodyRegionClass(status),
+            fontSize: 5.4
+        });
+    });
+    svgLabel(widget.labelLayer, `${subject.id} // ${subject.name}`, 2.05, 2.05, { className: `telemetry-${colorName}`, fontSize: 6.8 });
+}
+
+function vitalWaveValue(t, type, subject) {
+    if (subject.hr === 0 || subject.state === 'dead') return Math.sin(t * Math.PI * 2) * 0.015;
+    const local = ((t % 1) + 1) % 1;
+    if (type === 'pulse') {
+        if (local < 0.08) return local / 0.08 * 0.18;
+        if (local < 0.14) return 0.18 - ((local - 0.08) / 0.06) * 0.28;
+        if (local < 0.18) return -0.1 + ((local - 0.14) / 0.04) * 1.35;
+        if (local < 0.22) return 1.25 - ((local - 0.18) / 0.04) * 1.75;
+        if (local < 0.31) return -0.5 + ((local - 0.22) / 0.09) * 0.5;
+        if (local < 0.48) return Math.sin((local - 0.31) / 0.17 * Math.PI) * 0.28;
+        return Math.sin(local * Math.PI * 2) * 0.035;
+    }
+    if (type === 'resp') return Math.sin(t * Math.PI * 2) * 0.66 + Math.sin(t * Math.PI * 4) * 0.08;
+    if (type === 'neural') return Math.sin(t * Math.PI * 5.4) * 0.26 + Math.sin(t * Math.PI * 13.7) * 0.18;
+    if (type === 'stress') return Math.sin(t * Math.PI * 3.2) * 0.34 + Math.sin(t * Math.PI * 11.1) * 0.24;
+    if (type === 'bp') return local < 0.18 ? 0.62 : local < 0.28 ? -0.38 : Math.sin(t * Math.PI * 2) * 0.08;
+    return Math.sin(t * Math.PI * 2.2) * 0.22;
+}
+
+function drawVitalMonitorTrace(widget, lane, frame, subject, phase) {
+    const points = [];
+    const samples = Math.max(140, Math.round((lane.endCol - lane.startCol) * 9));
+    const speed = lane.speed * Math.max(0.08, subject.motion);
+    const scroll = prefersReducedMotion ? 0 : frame * speed;
+    for (let sample = 0; sample <= samples; sample++) {
+        const t = sample / samples;
+        const col = mixDiagnostic(lane.startCol, lane.endCol, t);
+        const drift = Math.sin((t * Math.PI * 2) + frame * 0.018 + lane.row) * lane.drift;
+        const jitter = subject.state === 'anomalous'
+            ? Math.sin(t * 91 + frame * 0.19) * 0.16
+            : Math.sin(t * 37 + frame * 0.04) * lane.noise;
+        const value = vitalWaveValue(t * lane.cycles - scroll, lane.type, subject) * lane.amp + drift + jitter;
+        points.push(widgetGridPixel(widget, col, lane.row - value));
+    }
+    svgPolyline(widget.glyphLayer, points, { className: `${lane.cls} telemetry-ekg-trace`, opacity: 0.54 + phase.detail * 0.34, strokeWidth: lane.strokeWidth || 1.35 });
+
+    const sweep = prefersReducedMotion ? 0.66 : (frame * lane.sweepSpeed + lane.row * 0.021) % 1;
+    const sweepCol = mixDiagnostic(lane.startCol, lane.endCol, sweep);
+    drawSvgGuideLine(widget, sweepCol, lane.row - 0.76, sweepCol, lane.row + 0.76, { className: lane.cls, opacity: 0.18 });
+}
+
+function subjectVitalReadings(subject, frame) {
+    const motion = subject.motion || 1;
+    const heartRate = Math.max(0, Math.round(subject.hr + Math.sin(frame * 0.045) * 2 * motion));
+    const resp = Math.max(0, Math.round(subject.resp + Math.sin(frame * 0.033) * 1.5 * motion));
+    const systolic = Number(String(subject.bp).split('/')[0]) || 0;
+    const diastolic = Number(String(subject.bp).split('/')[1]) || 0;
+    const strokeVolume = subject.hr === 0 ? 0 : clampDiagnostic((subject.o2 - 70) / 30, 0, 1) * (11.2 + (100 - subject.stress) / 40);
+    return {
+        heartRate,
+        resp,
+        bp: subject.bp,
+        systolic,
+        diastolic,
+        strokeVolume: Number(strokeVolume.toFixed(1)),
+        o2: subject.o2,
+        temp: subject.temp,
+        coher: Math.max(0, Math.round(subject.coher + Math.sin(frame * 0.035) * 3 * motion)),
+        stress: Math.max(0, Math.round(subject.stress + Math.sin(frame * 0.04) * 3 * motion))
+    };
+}
+
+function subjectSeverity(subject) {
+    if (subject.state === 'dead') return 'dead';
+    if (subject.state === 'critical' || subject.status === 'SHOCK') return 'critical';
+    if (subject.state === 'sick' || subject.state === 'injured' || subject.status === 'HYPOXIA') return 'warning';
+    if (subject.state === 'sleeping' || subject.state === 'sedated') return 'quiet';
+    if (subject.state === 'anomalous') return 'critical';
+    return 'normal';
+}
+
+function subjectBodyRegions(subject) {
+    const healthy = {
+        head: 'healthy',
+        torso: 'healthy',
+        leftArm: 'healthy',
+        rightArm: 'healthy',
+        leftLeg: 'healthy',
+        rightLeg: 'healthy'
+    };
+    const bySubject = {
+        'BD-03': { head: 'damaged', torso: 'damaged' },
+        'BD-04': { head: 'critical', torso: 'critical', leftArm: 'damaged', rightArm: 'damaged', leftLeg: 'damaged', rightLeg: 'damaged' },
+        'BD-05': { head: 'critical', torso: 'critical', leftArm: 'critical', rightArm: 'critical', leftLeg: 'critical', rightLeg: 'critical' },
+        'BD-08': { torso: 'damaged', leftArm: 'critical', leftLeg: 'damaged' },
+        'BD-09': { head: 'damaged', torso: 'damaged', rightArm: 'missing' },
+        'BD-11': { head: 'damaged', torso: 'critical', leftLeg: 'damaged', rightLeg: 'damaged' },
+        'BD-12': { head: 'critical', torso: 'critical', leftArm: 'critical', rightArm: 'critical', leftLeg: 'critical', rightLeg: 'critical' },
+        'BD-13': { head: 'critical', torso: 'critical', leftArm: 'critical', rightArm: 'critical', leftLeg: 'critical', rightLeg: 'critical' },
+        'BD-15': { head: 'critical', torso: 'critical', leftArm: 'damaged', rightArm: 'missing', leftLeg: 'damaged', rightLeg: 'critical' },
+        'BD-16': { torso: 'damaged', leftLeg: 'damaged' }
+    };
+    return { ...healthy, ...(bySubject[subject.id] || {}) };
+}
+
+function bodyRegionColor(status) {
+    if (status === 'critical') return { fill: 'rgba(255,51,51,0.48)', stroke: 'rgba(255,51,51,0.78)' };
+    if (status === 'damaged') return { fill: 'rgba(255,173,0,0.42)', stroke: 'rgba(255,173,0,0.72)' };
+    if (status === 'missing') return { fill: 'rgba(110,125,120,0.24)', stroke: 'rgba(160,176,170,0.44)' };
+    return { fill: 'rgba(3,74,22,0.46)', stroke: 'rgba(32,194,14,0.56)' };
+}
+
+function bodyRegionShortStatus(status) {
+    if (status === 'critical') return 'CRIT';
+    if (status === 'damaged') return 'DMG';
+    if (status === 'missing') return 'MISS';
+    return 'OK';
+}
+
+function bodyRegionClass(status) {
+    if (status === 'critical') return 'telemetry-red';
+    if (status === 'damaged') return 'telemetry-amber';
+    if (status === 'missing') return 'telemetry-dim';
+    return 'telemetry-green';
+}
+
+function subjectBodySummary(regions) {
+    const values = Object.values(regions);
+    const missing = values.filter(value => value === 'missing').length;
+    const critical = values.filter(value => value === 'critical').length;
+    const damaged = values.filter(value => value === 'damaged').length;
+    if (missing) return `BODY MISS ${missing} // CRIT ${critical} // DMG ${damaged}`;
+    if (critical) return `BODY CRIT ${critical} // DMG ${damaged}`;
+    if (damaged) return `BODY DMG ${damaged} // OBSERVE`;
+    return 'BODY NOMINAL // ALL REGIONS GREEN';
+}
+
+function subjectEndTidalCo2(subject, readings) {
+    if (subject.state === 'dead') return 0;
+    if (subject.status === 'SHOCK' || readings.systolic < 85) return 24;
+    if (subject.status === 'HYPOXIA' || readings.o2 < 88) return 31;
+    if (readings.resp > 26) return 32;
+    if (readings.resp < 8 || subject.state === 'sedated') return 49;
+    if (subject.state === 'sleeping') return 42;
+    if (subject.state === 'sick') return 41;
+    return 38;
+}
+
+function subjectSignalProfile(subject, readings) {
+    if (subject.state === 'dead') {
+        return {
+            perfusion: 0,
+            ecgAmp: 0.018,
+            respAmp: 0.012,
+            plethAmp: 0.014,
+            co2Amp: 0.014,
+            artAmp: 0.014,
+            cvpAmp: 0.012,
+            artifact: 0,
+            irregular: 0,
+            baseline: 0
+        };
+    }
+    const systolic = readings.systolic || 0;
+    const pulsePressure = Math.max(0, systolic - (readings.diastolic || 0));
+    const perfusion = clampDiagnostic((systolic / 118) * ((readings.o2 || 0) / 98), 0.05, 1.18);
+    const respiratoryLoad = subject.status === 'HYPOXIA' || readings.o2 < 90
+        ? 1.36
+        : readings.resp < 8 || subject.state === 'sedated'
+            ? 0.56
+            : readings.resp > 24
+                ? 1.18
+                : subject.state === 'sleeping'
+                    ? 0.72
+                    : 1;
+    const shock = subject.status === 'SHOCK' || systolic < 85;
+    const critical = subject.state === 'critical' || subject.state === 'anomalous';
+    return {
+        perfusion,
+        ecgAmp: subject.state === 'sleeping' || subject.state === 'sedated' ? 0.72 : critical ? 1.08 : 0.9,
+        respAmp: clampDiagnostic(0.78 * respiratoryLoad, 0.34, 1.24),
+        plethAmp: clampDiagnostic(0.98 * perfusion, 0.08, 1.04),
+        co2Amp: clampDiagnostic(subjectEndTidalCo2(subject, readings) / 42, 0.18, 1.18),
+        artAmp: clampDiagnostic((pulsePressure / 44) * (shock ? 0.55 : 0.85), 0.08, 1.16),
+        cvpAmp: shock ? 0.16 : critical ? 0.34 : 0.24,
+        artifact: subject.state === 'anomalous' ? 0.15 : subject.state === 'unknown' ? 0.09 : critical ? 0.045 : 0.012,
+        irregular: subject.state === 'anomalous' ? 0.9 : subject.status === 'SHOCK' ? 0.48 : critical ? 0.32 : subject.state === 'unknown' ? 0.36 : 0.06,
+        baseline: subject.status === 'HYPOXIA' || shock ? 0.08 : 0.025
+    };
+}
+
+function icuNumericClass(kind, value, subject) {
+    if (subject.state === 'dead') return 'telemetry-red';
+    if (kind === 'hr') return value < 45 || value > 130 ? 'telemetry-red' : value < 55 || value > 100 ? 'telemetry-amber' : 'telemetry-green';
+    if (kind === 'resp') return value < 8 || value > 28 ? 'telemetry-red' : value < 10 || value > 22 ? 'telemetry-yellow' : 'telemetry-yellow';
+    if (kind === 'spo2') return value < 88 ? 'telemetry-red' : value < 94 ? 'telemetry-amber' : 'telemetry-cyan';
+    if (kind === 'co2') return value < 25 || value > 55 ? 'telemetry-red' : value < 32 || value > 45 ? 'telemetry-amber' : 'telemetry-magenta';
+    if (kind === 'bp') {
+        const systolic = Number(String(value).split('/')[0]) || 0;
+        return systolic < 85 || systolic > 160 ? 'telemetry-red' : systolic < 95 || systolic > 145 ? 'telemetry-amber' : 'telemetry-white';
+    }
+    return 'telemetry-cyan';
+}
+
+function icuWaveValue(type, t, subject, lane = {}) {
+    if (subject.state === 'dead') {
+        if (type === 'ecg') return Math.sin(t * Math.PI * 2) * 0.01;
+        return Math.sin(t * Math.PI * 2) * 0.006;
+    }
+    const local = ((t % 1) + 1) % 1;
+    if (type === 'ecg') {
+        if (local < 0.04) return 0.08;
+        if (local < 0.07) return -0.25;
+        if (local < 0.09) return 1.2;
+        if (local < 0.12) return -0.45;
+        if (local < 0.18) return 0.05;
+        if (local < 0.28) return Math.sin((local - 0.18) / 0.1 * Math.PI) * 0.26;
+        if (local < 0.58) return 0.02;
+        if (local < 0.72) return Math.sin((local - 0.58) / 0.14 * Math.PI) * 0.34;
+        return 0.02;
+    }
+    if (type === 'resp') {
+        const distress = subject.status === 'HYPOXIA' || subject.o2 < 88 || subject.status === 'SHOCK';
+        const base = Math.sin(t * Math.PI * 2) * 0.72;
+        return distress ? base + Math.sin(t * Math.PI * 4.2) * 0.12 : base;
+    }
+    if (type === 'pleth') {
+        const notch = lane.lowPerfusion ? 0.08 : 0.2;
+        if (local < 0.18) return Math.sin(local / 0.18 * Math.PI) * 0.98;
+        if (local < 0.44) return 0.48 + Math.sin((local - 0.18) / 0.26 * Math.PI) * notch;
+        return -0.18 + Math.cos((local - 0.44) / 0.56 * Math.PI) * 0.16;
+    }
+    if (type === 'co2') {
+        if (local < 0.16) return -0.34;
+        if (local < 0.32) return -0.34 + ((local - 0.16) / 0.16) * 0.78;
+        if (local < 0.72) return 0.44 + Math.sin((local - 0.32) / 0.4 * Math.PI) * 0.08;
+        if (local < 0.86) return 0.44 - ((local - 0.72) / 0.14) * 0.78;
+        return -0.34;
+    }
+    if (type === 'ibp') {
+        const systolicSnap = local < 0.12 ? Math.sin(local / 0.12 * Math.PI) * 0.32 : 0;
+        return icuWaveValue('pleth', t, subject, lane) * 0.58 + systolicSnap + Math.sin(t * Math.PI * 6) * 0.04;
+    }
+    if (type === 'cvp') return Math.sin(t * Math.PI * 5) * 0.11 + Math.sin(t * Math.PI * 11) * 0.06;
+    return Math.sin(t * Math.PI * 2) * 0.2;
+}
+
+function drawIcuWaveform(widget, lane, frame, subject) {
+    const samples = 240;
+    const points = [];
+    const scroll = prefersReducedMotion ? 0 : frame * lane.speed;
+    for (let sample = 0; sample <= samples; sample++) {
+        const t = sample / samples;
+        const col = mixDiagnostic(lane.startCol, lane.endCol, t);
+        let waveT = t * lane.cycles - scroll;
+        if (lane.irregular && lane.type === 'ecg') {
+            const beatIndex = Math.floor(waveT);
+            waveT += Math.sin(beatIndex * 12.9898 + subject.hr * 0.071) * 0.055 * lane.irregular;
+        }
+        const artifact = (lane.artifact || 0) * (
+            Math.sin(t * 117 + frame * 0.19) * 0.58 +
+            Math.sin(t * 43 + frame * 0.071) * 0.42
+        );
+        const baseline = (lane.baseline || 0) * Math.sin(t * Math.PI * 2 + frame * 0.018 + lane.row);
+        const value = icuWaveValue(lane.type, waveT, subject, lane) * lane.amp + artifact + baseline;
+        const y = lane.row - value;
+        points.push(widgetContinuousPoint(widget, col, y));
+    }
+    svgPathFromPoints(widget.glyphLayer, points, {
+        className: `${lane.cls} telemetry-monitor-trace`,
+        opacity: lane.opacity ?? 0.94,
+        strokeWidth: lane.strokeWidth || 1.15,
+        smooth: lane.smooth ?? true
+    });
+    const labelCol = lane.labelCol ?? lane.startCol;
+    svgLabel(widget.labelLayer, lane.label, labelCol, lane.row - lane.labelOffset, { className: lane.cls, fontSize: 7.2 });
+    if (lane.subLabel) svgLabel(widget.labelLayer, lane.subLabel, lane.subLabelCol ?? labelCol + 5, lane.row - lane.labelOffset, { className: lane.cls, fontSize: 6.4 });
+}
+
+function renderIcuReadoutCell(widget, label, value, unit, x, y, cls, options = {}) {
+    const preciseLabel = (text, col, row, fontSize) => {
+        const point = widgetContinuousPoint(widget, col, row);
+        const element = svgElement('text', {
+            x: point.x,
+            y: point.y,
+            class: `telemetry-label ${cls}`.trim()
+        });
+        if (fontSize) element.setAttribute('font-size', fontSize);
+        element.textContent = String(text);
+        widget.labelLayer.appendChild(element);
+        return element;
+    };
+    preciseLabel(label, x, y, options.labelSize || 7.5);
+    if (unit) preciseLabel(unit, x + (options.unitOffset || 17), y, 6.4);
+    preciseLabel(value, x + (options.valueOffset || 3), y + (options.valueRowOffset || 2.0), options.valueSize || 24);
+}
+
+function renderLargeBioscanSubjectWidget(widget, frame, stats, phase, subject) {
+    const themeClass = `telemetry-${subject.theme || 'cyan'}`;
+    diagText('diagVitalsSubject', `${subject.id} ${String(diagnosticVitalsSubjectIndex + 1).padStart(2, '0')}/${DIAGNOSTIC_VITAL_SUBJECTS.length}`);
+    const readings = subjectVitalReadings(subject, frame);
+    const regions = subjectBodyRegions(subject);
+    const profile = subjectSignalProfile(subject, readings);
+
+    drawDashboardGrid(widget, { className: 'telemetry-green', colStep: 4, rowStep: 2 });
+    drawSvgGuideRect(widget, 1.1, 1.55, 16.6, 21.25, { className: 'telemetry-green', opacity: 0.18 });
+    drawSvgGuideRect(widget, 18.25, 1.55, 50.4, 21.25, { className: 'telemetry-cyan', opacity: 0.14 });
+    drawSvgGuideRect(widget, 70.05, 1.55, 24.75, 21.25, { className: 'telemetry-cyan', opacity: 0.18 });
+    const readoutX = 70.2;
+    drawSvgGuideLine(widget, 17.8, 1.65, 17.8, 22.65, { className: 'telemetry-green', opacity: 0.24 });
+    drawSvgGuideLine(widget, readoutX - 0.9, 1.65, readoutX - 0.9, 22.65, { className: 'telemetry-cyan', opacity: 0.34 });
+    [4.95, 8.15, 11.45, 14.75, 18.05, 21.35].forEach(row => drawSvgGuideLine(widget, readoutX - 0.9, row, 94.8, row, { className: 'telemetry-cyan', opacity: 0.2 }));
+
+    svgLabel(widget.labelLayer, 'SUBJECT MATRIX', 2.05, 1.25, { className: 'telemetry-amber', fontSize: 6.6 });
+    svgLabel(widget.labelLayer, 'LIVE VITAL MONITOR', 18.65, 1.25, { className: 'telemetry-amber', fontSize: 6.6 });
+    svgLabel(widget.labelLayer, 'READOUT', 70.3, 1.25, { className: 'telemetry-amber', fontSize: 6.6 });
+    renderBodyCardioAsset(widget, subject, frame);
+
+    const severity = subjectSeverity(subject);
+    svgLabel(widget.labelLayer, `ICU BUS // ${severity.toUpperCase()} // PERF ${Math.round(Math.min(1, profile.perfusion) * 100)}%`, 35.6, 2.35, { className: themeClass, fontSize: 6.4 });
+
+    const waveStart = 27.1;
+    const waveEnd = 68.1;
+    const labelCol = 18.65;
+    const lowPerfusion = profile.perfusion < 0.56;
+    const plethClass = readings.o2 < 88 || profile.perfusion < 0.42
+        ? 'telemetry-red'
+        : readings.o2 < 94 || profile.perfusion < 0.7
+            ? 'telemetry-amber'
+            : 'telemetry-cyan';
+    const artClass = readings.systolic < 85 || readings.systolic > 160
+        ? 'telemetry-red'
+        : readings.systolic < 95 || readings.systolic > 145
+            ? 'telemetry-amber'
+            : 'telemetry-orange';
+    const lanes = [
+        { label: 'ECG', subLabel: 'II X1', row: 4.65, cls: icuNumericClass('hr', readings.heartRate, subject), type: 'ecg', amp: profile.ecgAmp, cycles: readings.heartRate > 0 ? Math.max(2.2, readings.heartRate / 17.5) : 1, speed: 0.0095, startCol: waveStart, endCol: waveEnd, labelCol, labelOffset: 1.35, strokeWidth: 1.2, irregular: profile.irregular, artifact: profile.artifact * 0.5, baseline: profile.baseline * 0.3 },
+        { label: 'RESP', row: 8.0, cls: icuNumericClass('resp', readings.resp, subject), type: 'resp', amp: profile.respAmp, cycles: Math.max(0.8, readings.resp / 4.2), speed: 0.0045, startCol: waveStart, endCol: waveEnd, labelCol, labelOffset: 1.22, strokeWidth: 1.1, artifact: profile.artifact * 0.25, baseline: profile.baseline },
+        { label: 'Pleth', row: 11.25, cls: plethClass, type: 'pleth', amp: profile.plethAmp, cycles: readings.heartRate > 0 ? Math.max(2.4, readings.heartRate / 16.2) : 1, speed: 0.008, startCol: waveStart, endCol: waveEnd, labelCol, labelOffset: 1.22, strokeWidth: 1.15, artifact: profile.artifact * 0.32, baseline: profile.baseline * 0.55, lowPerfusion },
+        { label: 'CO2', row: 14.45, cls: icuNumericClass('co2', subjectEndTidalCo2(subject, readings), subject), type: 'co2', amp: profile.co2Amp * 0.72, cycles: Math.max(0.75, readings.resp / 5.5), speed: 0.0042, startCol: waveStart, endCol: waveEnd, labelCol, labelOffset: 1.12, strokeWidth: 1.05, artifact: profile.artifact * 0.18, baseline: profile.baseline * 0.2 },
+        { label: 'CH1:Art', row: 17.2, cls: artClass, type: 'ibp', amp: profile.artAmp, cycles: readings.heartRate > 0 ? Math.max(2.2, readings.heartRate / 15.4) : 1, speed: 0.0085, startCol: waveStart, endCol: waveEnd, labelCol, labelOffset: 1.08, strokeWidth: 1.05, artifact: profile.artifact * 0.25, baseline: profile.baseline * 0.42, lowPerfusion },
+        { label: 'CH2:Cvp', row: 20.55, cls: subject.state === 'dead' ? 'telemetry-red' : 'telemetry-orange', type: 'cvp', amp: profile.cvpAmp, cycles: subject.state === 'dead' ? 1 : 8, speed: 0.007, startCol: waveStart, endCol: waveEnd, labelCol, labelOffset: 1.2, strokeWidth: 1.0, opacity: subject.state === 'dead' ? 0.38 : 0.78, artifact: profile.artifact * 0.22, baseline: profile.baseline * 0.24 }
+    ];
+    lanes.forEach(lane => {
+        drawSvgGuideLine(widget, lane.startCol, lane.row, lane.endCol, lane.row, { className: 'telemetry-dim', opacity: 0.1 });
+        drawIcuWaveform(widget, lane, frame, subject);
+    });
+
+    const co2 = subjectEndTidalCo2(subject, readings);
+    renderIcuReadoutCell(widget, 'ECG', `${readings.heartRate}`, 'bpm', readoutX, 1.9, icuNumericClass('hr', readings.heartRate, subject), { valueSize: 24, valueOffset: 6, valueRowOffset: 1.55, unitOffset: 5 });
+    renderIcuReadoutCell(widget, 'RESP', `${readings.resp}`, '', readoutX, 5.2, icuNumericClass('resp', readings.resp, subject), { valueSize: 16, valueOffset: 2.5, valueRowOffset: 1.7 });
+    renderIcuReadoutCell(widget, 'TEMP', subject.temp, '', 82.7, 5.2, 'telemetry-amber', { valueSize: 9.5, valueOffset: 0, valueRowOffset: 1.55 });
+    renderIcuReadoutCell(widget, 'SpO2', `${readings.o2}`, '%', readoutX, 8.45, icuNumericClass('spo2', readings.o2, subject), { valueSize: 18, valueOffset: 2.5, valueRowOffset: 1.65, unitOffset: 20 });
+    renderIcuReadoutCell(widget, 'CO2', `${co2}`, 'mmHg', readoutX, 11.75, icuNumericClass('co2', co2, subject), { valueSize: 17, valueOffset: 2.5, valueRowOffset: 1.6, unitOffset: 16 });
+    renderIcuReadoutCell(widget, 'IBP (1,2)', subject.bp, 'mmHg', readoutX, 15.05, artClass, { valueSize: 12.5, valueOffset: 0.5, valueRowOffset: 1.55, unitOffset: 18 });
+    renderIcuReadoutCell(widget, 'NIBP', subject.bp, 'mmHg', readoutX, 18.35, icuNumericClass('bp', subject.bp, subject), { valueSize: 12.5, valueOffset: 0.5, valueRowOffset: 1.55, unitOffset: 18 });
+    svgLabel(widget.labelLayer, `STATUS ${subject.status}`, readoutX, 22.25, { className: themeClass, fontSize: 6.1 });
+    svgLabel(widget.labelLayer, `${subject.state.toUpperCase()} // CNS ${readings.coher}% // STR ${readings.stress}%`, 18.65, 22.25, { className: themeClass, fontSize: 6.1 });
+    svgLabel(widget.labelLayer, `${subjectBodySummary(regions)} // BIO ${String(stats.lifeCount).padStart(2, '0')}`, 2.05, 22.75, { className: themeClass, fontSize: 5.7 });
+}
+
 function clearSvgLayer(layer) {
     if (layer) layer.replaceChildren();
 }
@@ -990,8 +1551,8 @@ function renderDiagnosticBootWidget(id, label, frame) {
     if (id === 'diagOutpost') return renderDiagnosticBootRadarWidget(id, frame, progress);
     if (id === 'diagGenerator') return renderDiagnosticBootSignalWidget(id, frame, progress);
     if (id === 'diagPower') return renderDiagnosticBootStatusWidget(id, frame, progress);
-    if (id === 'diagAlarm') return renderBlackDesertMapDashboardWidget(id, frame, { mode: 'boot', detail: progress / 100, sensorProgress: progress });
-    if (id === 'diagLife') return renderDiagnosticBootBioWidget(id, frame, progress);
+    if (id === 'diagAlarm') return renderDiagnosticBootBioWidget(id, frame, progress);
+    if (id === 'diagLife') return renderDiagnosticBootStatusWidget(id, frame, progress);
     renderStatusLinesWidget(id, [`BOOTING ${label}`, `BUS ${glyphProgressBar(progress, 14)} ${progress}%`], frame, { kind: 'diag-boot-fallback' });
 }
 
@@ -1280,6 +1841,36 @@ function widgetGridPixel(widget, col, row) {
     return gridPoint(col, row, widget.cellWidth, widget.cellHeight);
 }
 
+function widgetContinuousPoint(widget, col, row) {
+    return {
+        x: col * widget.cellWidth + widget.cellWidth / 2,
+        y: row * widget.cellHeight + widget.cellHeight / 2
+    };
+}
+
+function svgPathFromPoints(layer, points, options = {}) {
+    if (!points?.length) return null;
+    const fmt = value => Number(value).toFixed(2);
+    const smooth = options.smooth !== false && points.length > 2;
+    let d = `M ${fmt(points[0].x)} ${fmt(points[0].y)}`;
+    if (smooth) {
+        for (let index = 1; index < points.length - 1; index++) {
+            const current = points[index];
+            const next = points[index + 1];
+            const midX = (current.x + next.x) / 2;
+            const midY = (current.y + next.y) / 2;
+            d += ` Q ${fmt(current.x)} ${fmt(current.y)} ${fmt(midX)} ${fmt(midY)}`;
+        }
+        const last = points[points.length - 1];
+        d += ` T ${fmt(last.x)} ${fmt(last.y)}`;
+    } else {
+        for (let index = 1; index < points.length; index++) {
+            d += ` L ${fmt(points[index].x)} ${fmt(points[index].y)}`;
+        }
+    }
+    return svgPath(layer, d, options);
+}
+
 function ekgWaveValue(position, intensity = 1) {
     const p = ((position % 1) + 1) % 1;
     const gaussian = (center, width, height) => height * Math.exp(-((p - center) ** 2) / (2 * width * width));
@@ -1376,22 +1967,72 @@ function renderGateScopeDashboardWidget(id, frame, generatorValue, phase) {
 }
 
 function renderBioscanArrayDashboardWidget(id, frame, stats, phase) {
-    const widget = createSvgWidget(id, { cols: 62, rows: 14, cellHeight: 10, kind: 'diag-bioscan-ekg-array' });
+    const large = id === 'diagAlarm';
+    const subject = large ? selectedDiagnosticVitalSubject() : null;
+    const widget = createSvgWidget(id, {
+        cols: large ? 96 : 62,
+        rows: large ? 24 : 14,
+        cellHeight: large ? 7 : 10,
+        kind: large ? 'diag-bioscan-expanded-vitals' : 'diag-bioscan-ekg-array'
+    });
     if (!widget) return;
-    drawDashboardGrid(widget, { className: 'telemetry-green', colStep: 5, rowStep: 3 });
-    const heartRate = Math.round(diagnosticLiveValue(132 + Math.sin(frame * 0.12) * 3, 48, phase));
-    const startCol = 15;
-    const endCol = 50;
-    const lanes = [
+    bindDiagnosticVitalsControls();
+    clearSvgLayer(widget.guideLayer);
+    clearSvgLayer(widget.glyphLayer);
+    clearSvgLayer(widget.labelLayer);
+    if (large) {
+        renderLargeBioscanSubjectWidget(widget, performance.now() / 16.667, stats, phase, subject);
+        return;
+    }
+    drawDashboardGrid(widget, { className: 'telemetry-green', colStep: large ? 6 : 5, rowStep: large ? 3 : 3 });
+    const motion = large ? subject.motion : 1;
+    const heartRate = large
+        ? Math.max(0, Math.round(diagnosticLiveValue(subject.hr + Math.sin(frame * 0.12) * 3 * motion, Math.max(18, subject.hr * 0.38), phase)))
+        : Math.round(diagnosticLiveValue(132 + Math.sin(frame * 0.12) * 3, 48, phase));
+    const startCol = large ? 24 : 15;
+    const endCol = large ? 70 : 50;
+    const lanes = large ? [
+        { label: 'PULSE', value: `${heartRate} bpm`, row: 4, cls: subject.hr === 0 ? 'telemetry-red' : subject.hr > 120 ? 'telemetry-red' : subject.hr > 95 ? 'telemetry-amber' : 'telemetry-green', speed: 0.031 * motion, cycles: 3.15, amp: subject.hr === 0 ? 0.03 : 1.08 * motion, drift: 0.04, noise: subject.hr === 0 ? 0.001 : 0.018 },
+        { label: 'BP SYS/DIA', value: `${subject.bp}`, row: 6, cls: subject.bp === '0/0' ? 'telemetry-red' : subject.bp === '--/--' ? 'telemetry-amber' : 'telemetry-cyan', speed: 0.023 * motion, cycles: 2.25, amp: subject.hr === 0 ? 0.02 : 0.78 * motion, drift: 0.18, noise: 0.018 },
+        { label: 'RESP', value: `${Math.max(0, Math.round(subject.resp + Math.sin(frame * 0.055) * 2 * motion))} rpm`, row: 8, cls: subject.resp === 0 ? 'telemetry-red' : subject.resp > 24 || subject.resp < 8 ? 'telemetry-amber' : 'telemetry-cyan', speed: 0.018 * Math.max(0.2, motion), cycles: 1.72, amp: subject.resp === 0 ? 0.02 : 0.72 * motion, drift: 0.22, noise: 0.012 },
+        { label: 'O2 SAT', value: `${subject.o2}%`, row: 10, cls: subject.o2 < 85 ? 'telemetry-red' : subject.o2 < 94 ? 'telemetry-amber' : 'telemetry-green', speed: 0.019 * motion, cycles: 2.6, amp: subject.o2 === 0 ? 0.02 : 0.48 * motion, drift: 0.34, noise: 0.016 },
+        { label: 'NEURAL', value: `${subject.neural}`, row: 12, cls: subject.coher < 25 ? 'telemetry-red' : subject.coher < 65 ? 'telemetry-amber' : 'telemetry-cyan', speed: 0.024 * motion, cycles: 3.4, amp: subject.coher === 0 ? 0.02 : 0.54 * motion, drift: 0.43, noise: subject.state === 'anomalous' ? 0.09 : 0.032 },
+        { label: 'COHER', value: `${Math.round(subject.coher + Math.sin(frame * 0.08) * 4 * motion)}%`, row: 14, cls: subject.coher < 25 ? 'telemetry-red' : subject.coher < 60 ? 'telemetry-amber' : 'telemetry-green', speed: 0.027 * motion, cycles: 2.9, amp: subject.coher === 0 ? 0.01 : 0.62 * motion, drift: 0.61, noise: 0.038 },
+        { label: 'STRESS', value: `${Math.round(subject.stress + Math.sin(frame * 0.07) * 4 * motion)}%`, row: 16, cls: subject.stress > 85 ? 'telemetry-red' : subject.stress > 55 ? 'telemetry-amber' : 'telemetry-green', speed: 0.021 * motion, cycles: 2.1, amp: subject.stress === 0 ? 0.02 : 0.68 * motion, drift: 0.61, noise: 0.022 },
+        { label: 'CORT/TEMP', value: `${subject.cort} // ${subject.temp}`, row: 18, cls: subject.theme === 'red' ? 'telemetry-red' : subject.theme === 'amber' ? 'telemetry-amber' : 'telemetry-cyan', speed: 0.026 * motion, cycles: 2.4, amp: subject.cort === 0 ? 0.02 : 0.58 * motion, drift: 0.54, noise: 0.026 }
+    ] : [
         { label: 'UNIT-01 PULSE', value: `${heartRate} bpm`, row: 3, cls: 'telemetry-green', speed: 0.031, cycles: 2.45, amp: 1.14, drift: 0.04, noise: 0.018 },
         { label: 'UNIT-02 RESP', value: `${Math.round(16 + Math.sin(frame * 0.055) * 2)} rpm`, row: 6, cls: 'telemetry-cyan', speed: 0.018, cycles: 1.72, amp: 0.78, drift: 0.22, noise: 0.012 },
         { label: 'UNIT-03 NEURAL', value: `${statusGet('diagnostic.life.neural_mv', '2.8 mV')}`, row: 9, cls: 'telemetry-amber', speed: 0.024, cycles: 2.9, amp: 0.54, drift: 0.43, noise: 0.032 },
         { label: 'UNIT-04 STRESS', value: `${Math.round(diagnosticLiveValue(74 + Math.sin(frame * 0.07) * 4, 16, phase))}%`, row: 12, cls: 'telemetry-red', speed: 0.021, cycles: 2.1, amp: 0.68, drift: 0.61, noise: 0.022 }
     ];
+    if (large) {
+        diagText('diagVitalsSubject', `${subject.id} ${String(diagnosticVitalsSubjectIndex + 1).padStart(2, '0')}/${DIAGNOSTIC_VITAL_SUBJECTS.length}`);
+        svgLabel(widget.labelLayer, 'SUBJECT MATRIX', 2, 2, { className: 'telemetry-amber' });
+        renderBodyCardioAsset(widget, subject, frame);
+        const pulseGlyph = ['·', '•', '●', '◆'][Math.floor((frame % 16) / 4)];
+        svgTextGlyph(widget.glyphLayer, subject.hr === 0 ? '×' : pulseGlyph, 10, 8.2, { className: subject.hr === 0 ? 'telemetry-red' : 'telemetry-red', opacity: subject.hr === 0 ? 0.72 : 0.66 + Math.sin(frame * 0.28 * motion) * 0.18, fontSize: 12 });
+        ['CNS', 'CARD', 'RESP', 'ENDO', 'TRAUMA'].forEach((label, index) => {
+            const row = 5 + index * 3;
+            const values = [subject.coher, subject.hr === 0 ? 0 : 100 - Math.abs(subject.hr - 72), subject.o2, 100 - subject.cort, subject.stress];
+            const level = clampDiagnostic((values[index] || 0) / 100 + Math.sin(frame * 0.045 + index * 1.4) * 0.06 * motion, 0.02, 0.98);
+            const meterClass = level < 0.28 || index === 4 && level > 0.72 ? 'telemetry-red' : level < 0.55 ? 'telemetry-amber' : 'telemetry-green';
+            svgLabel(widget.labelLayer, label, 76, row, { className: meterClass });
+            for (let col = 84; col < 94; col++) {
+                const active = (col - 84) / 10 < level;
+                svgTextGlyph(widget.glyphLayer, active ? '█' : '░', col, row, {
+                    className: active ? meterClass : 'telemetry-dim',
+                    opacity: active ? 0.76 : 0.26
+                });
+            }
+        });
+    }
     lanes.forEach((lane, laneIndex) => {
-        svgLabel(widget.labelLayer, lane.label, 2, lane.row - 1, { className: lane.cls });
-        svgLabel(widget.labelLayer, lane.value, 52, lane.row - 1, { className: lane.cls });
-        drawSvgGuideRect(widget, startCol - 1, lane.row - 1.55, endCol - startCol + 2, 2.6, { className: lane.cls, opacity: 0.045 });
+        const labelCol = large ? 23 : 2;
+        const valueCol = large ? 72 : 52;
+        svgLabel(widget.labelLayer, lane.label, labelCol, lane.row - 0.85, { className: lane.cls, fontSize: large ? 7.4 : undefined });
+        svgLabel(widget.labelLayer, lane.value, valueCol, lane.row - 0.85, { className: lane.cls, fontSize: large ? 7.4 : undefined });
+        drawSvgGuideRect(widget, startCol - 1, lane.row - 0.72, endCol - startCol + 2, 1.42, { className: lane.cls, opacity: 0.045 });
         drawSvgGuideLine(widget, startCol, lane.row, endCol, lane.row, { className: lane.cls, opacity: 0.1 });
         const points = ekgLanePoints(widget, lane.row, startCol, endCol, {
             cycles: lane.cycles,
@@ -1414,15 +2055,100 @@ function renderBioscanArrayDashboardWidget(id, frame, stats, phase) {
             opacity: 0.7 + phase.detail * 0.24
         });
         const cursorCol = startCol + reveal * (endCol - startCol);
-        drawSvgGuideLine(widget, cursorCol, lane.row - 1.35, cursorCol, lane.row + 1.35, { className: lane.cls, opacity: 0.18 + phase.detail * 0.12 });
+        drawSvgGuideLine(widget, cursorCol, lane.row - 0.82, cursorCol, lane.row + 0.82, { className: lane.cls, opacity: 0.18 + phase.detail * 0.12 });
         svgTextGlyph(widget.glyphLayer, '▌', Math.round(cursorCol), lane.row, { className: lane.cls, opacity: 0.52 + phase.detail * 0.28 });
     });
-    svgLabel(widget.labelLayer, `BIO ${String(stats.lifeCount).padStart(2, '0')} // UNSTABLE ${String(stats.unstableLife).padStart(2, '0')} // UNKNOWN ${String(stats.unknownLife).padStart(2, '0')}`, 2, 13, { className: 'telemetry-amber' });
+    const footerRow = large ? 22.5 : 13;
+    svgLabel(widget.labelLayer, `BIO ${String(stats.lifeCount).padStart(2, '0')} // UNSTABLE ${String(stats.unstableLife).padStart(2, '0')} // UNKNOWN ${String(stats.unknownLife).padStart(2, '0')}`, 2, footerRow, { className: 'telemetry-amber' });
+    if (large) {
+        svgLabel(widget.labelLayer, `NEURAL ${statusGet('diagnostic.life.neural', 'COHERENCE LOW')}`, 42, 22.5, { className: 'telemetry-cyan' });
+        svgLabel(widget.labelLayer, `TRIAGE ${stats.unknownLife > 0 ? 'OPEN' : 'CLEAR'}`, 78, 22.5, { className: stats.unknownLife > 0 ? 'telemetry-red' : 'telemetry-green' });
+    }
     if (phase.detail < 0.98) {
         const scanCol = Math.round(mixDiagnostic(startCol, endCol, phase.sensorProgress / 100));
-        drawSvgGuideLine(widget, scanCol, 1.4, scanCol, 12.5, { className: 'telemetry-amber', opacity: 0.2 });
-        svgLabel(widget.labelLayer, `ACQ ${String(phase.sensorProgress).padStart(3, '0')}%`, 52, 13, { className: 'telemetry-amber' });
+        drawSvgGuideLine(widget, scanCol, 1.4, scanCol, large ? 21.5 : 12.5, { className: 'telemetry-amber', opacity: 0.2 });
+        svgLabel(widget.labelLayer, `ACQ ${String(phase.sensorProgress).padStart(3, '0')}%`, large ? 84 : 52, footerRow, { className: 'telemetry-amber' });
     }
+}
+
+function renderShareholderValueDashboardWidget(id, frame, phase) {
+    const widget = createSvgWidget(id, { cols: 62, rows: 14, cellHeight: 10, kind: 'diag-shareholder-value-chart' });
+    if (!widget) return;
+    clearSvgLayer(widget.guideLayer);
+    clearSvgLayer(widget.glyphLayer);
+    clearSvgLayer(widget.labelLayer);
+    drawDashboardGrid(widget, { className: 'telemetry-cyan', colStep: 5, rowStep: 2 });
+    svgLabel(widget.labelLayer, 'SHAREHOLDER VALUE // PROJECTION TAPE', 2, 1.7, { className: 'telemetry-amber' });
+
+    const chartLeft = 3;
+    const chartRight = 43;
+    const readoutX = 45.5;
+    drawSvgGuideLine(widget, readoutX - 1, 2, readoutX - 1, 12.8, { className: 'telemetry-cyan', opacity: 0.24 });
+    [4.6, 7.2, 9.8, 12.4].forEach(row => drawSvgGuideLine(widget, readoutX - 1, row, 60.5, row, { className: 'telemetry-cyan', opacity: 0.18 }));
+
+    const schedulerMs = diagnosticRenderProfile().schedulerMs || 120;
+    const loopFrames = Math.max(1, Math.round(30000 / schedulerMs));
+    const loop = prefersReducedMotion ? 0.62 : (frame % loopFrames) / loopFrames;
+    const angle = loop * Math.PI * 2;
+
+    const toPoint = (col, row) => widgetContinuousPoint(widget, col, row);
+    const candleRect = (cls, x, y, width, height, opacity) => {
+        widget.glyphLayer.appendChild(svgElement('rect', {
+            x,
+            y,
+            width,
+            height,
+            fill: 'currentColor',
+            stroke: 'currentColor',
+            'stroke-width': 0.7,
+            class: cls,
+            opacity
+        }));
+    };
+    const drawCandles = (label, topRow, bottomRow, trend, labelClass, upClass, downClass) => {
+        const count = 26;
+        svgLabel(widget.labelLayer, label, chartLeft, topRow - 0.25, { className: labelClass, fontSize: 6.8 });
+        drawSvgGuideLine(widget, chartLeft, bottomRow, chartRight, bottomRow, { className: 'telemetry-dim', opacity: 0.12 });
+        drawSvgGuideLine(widget, chartLeft, topRow, chartRight, topRow, { className: 'telemetry-dim', opacity: 0.08 });
+        for (let index = 0; index < count; index++) {
+            const t = index / (count - 1);
+            const noiseA = Math.sin(angle + index * 1.731) * 0.026 + Math.sin(angle * 0.37 + index * 0.59) * 0.018;
+            const noiseB = Math.cos(angle * 0.83 + index * 1.17) * 0.024;
+            const base = trend === 'up' ? 0.18 + t * 0.68 : 0.82 - t * 0.64;
+            const open = clampDiagnostic(base + noiseA, 0.04, 0.96);
+            const closeBias = trend === 'up' ? 0.032 + t * 0.022 : -0.038 - t * 0.018;
+            const close = clampDiagnostic(base + closeBias + noiseB, 0.04, 0.96);
+            const high = clampDiagnostic(Math.max(open, close) + 0.07 + Math.sin(angle + index) * 0.012, 0.06, 0.99);
+            const low = clampDiagnostic(Math.min(open, close) - 0.07 + Math.cos(angle * 0.7 + index) * 0.012, 0.01, 0.94);
+            const col = mixDiagnostic(chartLeft + 1.2, chartRight - 1.2, t);
+            const x = toPoint(col, 0).x;
+            const highY = toPoint(0, mixDiagnostic(bottomRow, topRow, high)).y;
+            const lowY = toPoint(0, mixDiagnostic(bottomRow, topRow, low)).y;
+            const openY = toPoint(0, mixDiagnostic(bottomRow, topRow, open)).y;
+            const closeY = toPoint(0, mixDiagnostic(bottomRow, topRow, close)).y;
+            const cls = close >= open ? upClass : downClass;
+            const opacity = 0.55 + Math.sin(angle + index * 0.43) * 0.05;
+            svgLayerLine(widget.glyphLayer, x, highY, x, lowY, { className: `${cls} telemetry-monitor-trace`, opacity: opacity + 0.12, strokeWidth: 0.85 });
+            candleRect(cls, x - widget.cellWidth * 0.24, Math.min(openY, closeY), widget.cellWidth * 0.48, Math.max(2, Math.abs(closeY - openY)), opacity);
+        }
+    };
+
+    drawCandles('OPEX / CAPEX', 3.05, 6.6, 'up', 'telemetry-red', 'telemetry-red', 'telemetry-amber');
+    drawCandles('PROFIT / VALUE', 7.65, 12.15, 'down', 'telemetry-green', 'telemetry-green', 'telemetry-red');
+
+    const cursorCol = mixDiagnostic(chartLeft, chartRight, loop);
+    drawSvgGuideLine(widget, cursorCol, 2.2, cursorCol, 12.4, { className: 'telemetry-cyan', opacity: 0.16 });
+    svgLabel(widget.labelLayer, `T+${String(Math.floor(loop * 30)).padStart(2, '0')}s`, Math.max(chartLeft, cursorCol - 2), 13, { className: 'telemetry-dim', fontSize: 6.2 });
+
+    const opex = Math.round(122 + Math.sin(angle) * 2);
+    const profit = Math.round(18 + Math.cos(angle * 0.75) * 2);
+    const value = (70.4 + Math.sin(angle + 0.7) * 1.4).toFixed(1);
+    renderIcuReadoutCell(widget, 'OPEX', `+${opex}%`, 'RUN', 45.8, 2.2, 'telemetry-red', { valueSize: 14, valueOffset: 1, valueRowOffset: 1.55, unitOffset: 11 });
+    renderIcuReadoutCell(widget, 'PROFIT', `-${profit}%`, 'NET', 45.8, 4.9, 'telemetry-red', { valueSize: 16, valueOffset: 1, valueRowOffset: 1.65, unitOffset: 13 });
+    renderIcuReadoutCell(widget, 'VALUE', value, 'IDX', 45.8, 7.6, 'telemetry-amber', { valueSize: 16, valueOffset: 1, valueRowOffset: 1.65, unitOffset: 12 });
+    renderIcuReadoutCell(widget, 'RUNWAY', `${Math.round(4 + Math.sin(angle * 0.8))}Q`, 'RESV', 45.8, 10.3, 'telemetry-amber', { valueSize: 13, valueOffset: 1, valueRowOffset: 1.55, unitOffset: 13 });
+    svgLabel(widget.labelLayer, '30s PERFECT LOOP // CANDLE NORMALIZED', 16, 13, { className: 'telemetry-dim', fontSize: 6.4 });
+    drawDiagnosticPhaseScan(widget, phase, 'ROI');
 }
 
 function renderTacticalRadarDashboardWidget(id, frame, phase) {
@@ -2512,15 +3238,16 @@ function renderDiagnosticDashboard(timestamp = performance.now(), options = {}) 
     diagText('diagPowerStatus', diagnosticStatusText(powerStatus, phaseInfo, 'BUS', 'LOAD'));
     renderDiagnosticWidget('power', timestamp, () => renderReactorSyncDashboardWidget('diagPower', phase, { output: reactorOutput, sync: syncIntegrity, mainPower, reservePower }, phaseInfo), { force: forceWidgets });
 
-    const alarmStatus = statusGet('diagnostic.security.status', 'MESH').toUpperCase();
-    diagCardState('diagAlarmCard', phaseInfo.mode === 'live' ? statusState('diagnostic.security.state', 'warn') : 'ok');
-    diagText('diagAlarmStatus', diagnosticStatusText(alarmStatus === 'ARMED' ? 'MESH' : alarmStatus, phaseInfo, 'MAP', 'MESH'));
-    renderDiagnosticWidget('alarm', timestamp, () => renderBlackDesertMapDashboardWidget('diagAlarm', phase, phaseInfo), { force: forceWidgets });
+    const selectedVitalsSubject = selectedDiagnosticVitalSubject();
+    const lifeStatus = selectedVitalsSubject.status.toUpperCase();
+    const subjectCardState = selectedVitalsSubject.theme === 'red' ? 'alert' : selectedVitalsSubject.theme === 'amber' ? 'warn' : 'ok';
+    diagCardState('diagAlarmCard', phaseInfo.mode === 'live' ? subjectCardState : 'ok');
+    diagText('diagAlarmStatus', '');
+    renderDiagnosticWidget('alarm', timestamp, () => renderBioscanArrayDashboardWidget('diagAlarm', phase, { lifeCount, unstableLife, unknownLife }, phaseInfo), { force: forceWidgets, interval: 30 });
 
-    const lifeStatus = statusGet('diagnostic.life.status', `${unknownLife} UNKNOWN`).toUpperCase();
-    diagCardState('diagLifeCard', phaseInfo.mode === 'live' ? statusState('diagnostic.life.state', 'alert') : 'ok');
-    diagText('diagLifeStatus', diagnosticStatusText(lifeStatus, phaseInfo, 'BIO', 'SYNC'));
-    renderDiagnosticWidget('life', timestamp, () => renderBioscanArrayDashboardWidget('diagLife', phase, { lifeCount, unstableLife, unknownLife }, phaseInfo), { force: forceWidgets });
+    diagCardState('diagLifeCard', phaseInfo.mode === 'live' ? 'warn' : 'ok');
+    diagText('diagLifeStatus', diagnosticStatusText('VALUE', phaseInfo, 'ROI', 'BURN'));
+    renderDiagnosticWidget('life', timestamp, () => renderShareholderValueDashboardWidget('diagLife', phase, phaseInfo), { force: forceWidgets });
 
     diagCardState('diagEventsCard', phaseInfo.mode === 'live' ? statusState('diagnostic.alarm.state', 'warn') : 'ok');
     diagText('diagEventsStatus', diagnosticStatusText('FEED', phaseInfo, 'BOOT', 'TAIL'));
@@ -2550,7 +3277,7 @@ function runDiagnosticLoop(timestamp = 0) {
         diagnosticAnimFrame = null;
         return;
     }
-    const interval = diagnosticRenderProfile().schedulerMs || effectsFrameMs(80, 140, 180);
+    const interval = Math.min(diagnosticRenderProfile().schedulerMs || effectsFrameMs(80, 140, 180), 33);
     if (!diagnosticLastRender || timestamp - diagnosticLastRender >= interval) {
         diagnosticLastRender = timestamp;
         diagnosticFrame++;

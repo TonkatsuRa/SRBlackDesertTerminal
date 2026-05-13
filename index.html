@@ -53,8 +53,8 @@
                     <div class="diagnostic-readout telemetry-widget" id="diagGenerator" role="img" aria-label="SVG dual trace oscilloscope for gate stability"></div>
                 </div>
                 <div class="diagnostic-card" id="diagLifeCard">
-                    <div class="diagnostic-label"><span>BIOSCAN ARRAY // VITALS</span><span id="diagLifeStatus">BIO</span></div>
-                    <div class="diagnostic-readout telemetry-widget" id="diagLife" role="img" aria-label="SVG bioscan array with vital traces"></div>
+                    <div class="diagnostic-label"><span>SHAREHOLDER VALUE // PROJECTION</span><span id="diagLifeStatus">ROI</span></div>
+                    <div class="diagnostic-readout telemetry-widget" id="diagLife" role="img" aria-label="Animated shareholder value chart showing expenditure rising while profit falls"></div>
                 </div>
                 <div class="diagnostic-card" id="diagOutpostCard">
                     <div class="diagnostic-label"><span>TACTICAL SWEEP // RADAR</span><span id="diagOutpostStatus">PING</span></div>
@@ -65,8 +65,16 @@
                     <div class="diagnostic-readout telemetry-widget" id="diagNetwork" role="img" aria-label="SVG spectrum waterfall for entity noise and communications"></div>
                 </div>
                 <div class="diagnostic-card diagnostic-card-feature" id="diagAlarmCard">
-                    <div class="diagnostic-label"><span>BLACK DESERT // MESH MAP</span><span id="diagAlarmStatus">WATCH</span></div>
-                    <div class="diagnostic-readout telemetry-widget telemetry-widget-large" id="diagAlarm" role="img" aria-label="SVG Black Desert expedition wireframe map overview with ARES sites, routes, zones, and hazards"></div>
+                    <div class="diagnostic-label">
+                        <span>BIOSCAN ARRAY // VITALS</span>
+                        <span class="diagnostic-vitals-controls" aria-label="Select bioscan subject">
+                            <button class="diagnostic-cycle-btn" id="diagVitalsPrev" type="button" aria-label="Previous vital subject">&lt;-</button>
+                            <span id="diagVitalsSubject">SUBJ-01</span>
+                            <button class="diagnostic-cycle-btn" id="diagVitalsNext" type="button" aria-label="Next vital subject">-&gt;</button>
+                        </span>
+                        <span id="diagAlarmStatus">BIO</span>
+                    </div>
+                    <div class="diagnostic-readout telemetry-widget telemetry-widget-large" id="diagAlarm" role="img" aria-label="Large animated bioscan array with detailed crew vital traces"></div>
                 </div>
                 <div class="diagnostic-card" id="diagPowerCard">
                     <div class="diagnostic-label"><span>REACTOR // CONTAINMENT // SYNC</span><span id="diagPowerStatus">RESERVE</span></div>

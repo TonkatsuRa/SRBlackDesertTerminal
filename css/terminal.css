@@ -679,6 +679,37 @@ body.terminal-typing .terminal-typewriter-active::after {
     white-space: nowrap;
 }
 
+.diagnostic-vitals-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-left: auto;
+    color: var(--cyan);
+    opacity: 0.94;
+    white-space: nowrap;
+}
+
+.diagnostic-cycle-btn {
+    border: 1px solid rgba(0, 255, 213, 0.34);
+    background: rgba(0, 16, 12, 0.78);
+    color: var(--cyan);
+    font: inherit;
+    font-size: 10px;
+    line-height: 1;
+    padding: 3px 6px;
+    min-height: 22px;
+    cursor: pointer;
+    transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.diagnostic-cycle-btn:hover,
+.diagnostic-cycle-btn:focus-visible {
+    border-color: rgba(255, 173, 0, 0.6);
+    background: rgba(255, 173, 0, 0.12);
+    color: var(--amber);
+    outline: none;
+}
+
 .diagnostic-readout {
     margin: 0;
     color: var(--phosphor);
@@ -737,8 +768,14 @@ body.terminal-typing .terminal-typewriter-active::after {
 }
 
 .telemetry-ekg-trace {
-    stroke-linecap: butt;
-    stroke-linejoin: miter;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.telemetry-monitor-trace {
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    shape-rendering: geometricPrecision;
 }
 
 .telemetry-fill {
@@ -837,6 +874,10 @@ body.terminal-typing .terminal-typewriter-active::after {
 .telemetry-green { color: var(--phosphor); }
 .telemetry-amber { color: var(--amber); }
 .telemetry-red { color: var(--red); }
+.telemetry-yellow { color: #ffff00; }
+.telemetry-magenta { color: #ff55ff; }
+.telemetry-orange { color: #ff4d00; }
+.telemetry-white { color: rgba(245, 255, 245, 0.96); }
 .telemetry-dim { color: rgba(57, 255, 20, 0.42); }
 
 .diagnostic-card.wide .diagnostic-readout {
