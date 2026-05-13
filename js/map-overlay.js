@@ -49,8 +49,8 @@
             browser,
             pixelRatioCap: low ? 1 : 1.25,
             frameMs: reduced ? 60000 : (low ? 1000 / 24 : 1000 / 45),
-            autoRotate: !reduced && !safe && profile.name !== 'effects-low',
-            scan: !reduced && !safe,
+            autoRotate: true,
+            scan: true,
             markerPulse: !low,
             routeAnimation: !reduced && !safe,
             staticRender: reduced || safe

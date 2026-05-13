@@ -50,12 +50,6 @@
             beforeReturn: stopDiagnosticScreenLoop
         });
 
-        const closeButton = document.getElementById('diagnosticClose');
-        if (closeButton) {
-            closeButton.addEventListener('click', closeDiagnosticScreen);
-            closeButton.textContent = '[ BACK TO TERMINAL ]';
-        }
-
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
                 if (diagnosticAnimFrame) {

@@ -206,10 +206,6 @@
     ARES EXPEDITION // BLACK DESERT<br>
     <span id="mode">DIRECT HEIGHTMAP RENDER</span>
   </div>
-  <div class="hud tr">
-    METAPLANE OPERATIONS MAP<br>
-    MARCHING SQUARES // THREE.JS
-  </div>
   <div class="hud bl">
     DRAG ROTATE · SCROLL ZOOM · RIGHT-DRAG PAN
   </div>
@@ -218,10 +214,10 @@
       <div class="panel-content" id="panel-content">
         <div class="panel-controls-row">
           <button id="btn-locations">LOCATIONS</button>
-          <button class="active" id="btn-zones">ZONES</button>
+          <button id="btn-zones">ZONES</button>
           <button id="btn-network">NETWORK</button>
           <button id="btn-anomaly">ANOMALY SENSOR</button>
-          <button id="btn-contours">TERRAIN</button>
+          <button class="active" id="btn-contours">TERRAIN</button>
         </div>
         <div class="panel-controls-row">
           <button class="active" id="btn-rotate">AUTO-ROTATE</button>
@@ -229,7 +225,7 @@
           <button class="active" id="btn-surface">RELIEF SURFACE</button>
           <button id="btn-top">TOP VIEW</button>
           <button id="btn-iso">ISO VIEW</button>
-          <button id="btn-present">PRESENT VIEW</button>
+          <button class="active" id="btn-present">PRESENT VIEW</button>
         </div>
       </div>
       <button class="panel-toggle" id="btn-menu" aria-expanded="false" aria-label="Toggle options menu">
@@ -289,8 +285,8 @@
     name: IS_LOW_POWER ? "low" : "full",
     pixelRatioCap: IS_LOW_POWER ? 1 : 1.25,
     frameMs: IS_FIREFOX ? 1000 / 24 : (IS_LOW_POWER ? 1000 / 20 : 1000 / 30),
-    autoRotate: !PREFERS_REDUCED_MOTION,
-    scan: !PREFERS_REDUCED_MOTION,
+    autoRotate: true,
+    scan: true,
     markerPulse: !IS_LOW_POWER,
     routeAnimation: !PREFERS_REDUCED_MOTION,
     staticRender: PREFERS_REDUCED_MOTION
@@ -482,7 +478,7 @@
   let H = wrap.clientHeight;
 
   let scene, camera, renderer, controls;
-  let contourGroup, surfaceMesh, occluderMesh, pointCloud, grid, frame, tacticalLabels, locationsGroup, zoneGroup, networkGroup, anomalyGroup;
+  let contourGroup, surfaceMesh, occluderMesh, pointCloud, grid, frame, tacticalLabels, locationsGroup, zoneGroup, networkGroup, anomalyGroup, anomalyMarkerGroup;
   let locationMarkers = [];
   let siteLinks = [];
   let zoneMeshes = [];
@@ -542,11 +538,12 @@
       buildSurface(heightData);
       postMapProgress("EXTRACTING CONTOURS", 56);
       buildContours(heightData);
-      contourGroup.visible = false;
+      contourGroup.visible = true;
       buildPointCloud(heightData);
       addGroundDecoration();
       postMapProgress("CALIBRATING ZONES", 68);
       addZoneOverlays(heightData);
+      zoneGroup.visible = false;
       addLocationMarkers(heightData);
       locationsGroup.visible = false;
       postMapProgress("LINKING FACILITY OVERLAY", 78);
@@ -1756,6 +1753,9 @@
 
     locationsGroup = new THREE.Group();
     scene.add(locationsGroup);
+    anomalyMarkerGroup = new THREE.Group();
+    scene.add(anomalyMarkerGroup);
+    anomalyMarkerGroup.visible = false;
     locationMarkers = [];
 
     const coreTex = makeLocationTexture("core");
@@ -1870,7 +1870,11 @@
         grid: spec.grid
       };
 
-      locationsGroup.add(marker);
+      if (isAlert) {
+        anomalyMarkerGroup.add(marker);
+      } else {
+        locationsGroup.add(marker);
+      }
       locationMarkers.push(marker);
     });
   }
@@ -1912,6 +1916,10 @@
 
     anomalyGroup = new THREE.Group();
     scene.add(anomalyGroup);
+    if (anomalyMarkerGroup) {
+      anomalyMarkerGroup.visible = true;
+      anomalyGroup.add(anomalyMarkerGroup);
+    }
     anomalyWaves = [];
 
     for (let i = 0; i < 4; i++) {
@@ -2125,6 +2133,12 @@
   }
 
   function bindUI() {
+    const setViewButtonState = (activeView) => {
+      btnTop.classList.toggle("active", activeView === "top");
+      btnIso.classList.toggle("active", activeView === "iso");
+      btnPresent.classList.toggle("active", activeView === "present");
+    };
+
     btnMenu.addEventListener("click", () => {
       const collapsed = controlPanel.classList.toggle("collapsed");
       btnMenu.classList.toggle("active", !collapsed);
@@ -2191,6 +2205,7 @@
     btnTop.addEventListener("click", () => {
       controls.autoRotate = false;
       btnRotate.classList.remove("active");
+      setViewButtonState("top");
       camera.position.set(0, 7.0, 0.001);
       controls.target.set(0, 0.20, 0);
       controls.update();
@@ -2198,6 +2213,7 @@
     });
 
     btnIso.addEventListener("click", () => {
+      setViewButtonState("iso");
       camera.position.set(8.7, 3.3, 8.0);
       controls.target.set(0, 0.26, 0);
       controls.update();
@@ -2205,8 +2221,9 @@
     });
 
     btnPresent.addEventListener("click", () => {
-      controls.autoRotate = false;
-      btnRotate.classList.remove("active");
+      controls.autoRotate = true;
+      btnRotate.classList.add("active");
+      setViewButtonState("present");
       startPresentationView(
         new THREE.Vector3(7.6, 5.15, 7.35),
         new THREE.Vector3(0.28, 0.34, 0.18)
@@ -2280,7 +2297,7 @@
       updateAnomalySensor(heightDataRef, elapsed);
     }
 
-    if (locationsGroup && locationsGroup.visible) {
+    if ((locationsGroup && locationsGroup.visible) || (anomalyGroup && anomalyGroup.visible)) {
       if (mapProfile.markerPulse !== false) {
         for (const marker of locationMarkers) {
           const phase = elapsed * 2.1 + marker.userData.phase;
