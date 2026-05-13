@@ -1,5 +1,7 @@
 # Black Desert Research Terminal
 
+http://www.blackdesert.duckdns.org/
+
 Static retro sci-fi terminal project for GitHub Pages.
 
 ## How To Edit
