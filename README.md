@@ -48,30 +48,6 @@ Black Desert Research Terminal presents an in-universe operations console with s
 
 There is no npm install, no bundler, no React, no TypeScript, and no server-side runtime required for deployment.
 
-## Quick Start
-
-Clone or download the repository, then open the project folder.
-
-On Windows, run:
-
-```bat
-start-server.bat
-```
-
-Then open:
-
-```text
-http://localhost:8000/
-```
-
-You can also use Python directly:
-
-```bash
-python -m http.server 8000
-```
-
-Opening `index.html` directly can work for parts of the app, but a local server is recommended because browser security can block `fetch()` access to Markdown, JSON, ZIP, and database files under `file://`.
-
 ## Main Commands
 
 - `HELP` - Show terminal usage and available commands.
@@ -103,7 +79,6 @@ js/                                     Terminal, diagnostics, maps, state, and 
 content/terminal-content.md             Editable terminal text and labels
 databases/                              Database packages and manifest
 assets/                                 Images, maps, SVGs, and supporting media
-start-server.bat                        Windows local preview launcher
 start-server.ps1                        PowerShell fallback static server
 ```
 
@@ -182,4 +157,4 @@ www.blackdesert.duckdns.org
 - The app is intentionally static and client-side.
 - Some external libraries are loaded from CDNs for browser features.
 - A local HTTP server gives the most reliable preview.
-- If database loading is blocked while opening files directly, use `start-server.bat` or load database files manually through the in-terminal file picker.
+- If database loading is blocked while opening files directly, use a local HTTP server or load database files manually through the in-terminal file picker.
