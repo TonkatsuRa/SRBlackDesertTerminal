@@ -104,12 +104,12 @@
         </div>
     </div>
 
-    <!-- Facility Status -->
+    <!-- Topography -->
     <div class="facility-overlay" id="facilityOverlay" aria-hidden="true">
         <div class="facility-panel facility-map-panel glow" role="dialog" aria-modal="true" aria-labelledby="facilityTitle">
             <div class="facility-header">
                 <div>
-                    <div class="facility-title glow" id="facilityTitle">FACILITY STATUS</div>
+                    <div class="facility-title glow" id="facilityTitle">TOPOGRAPHY</div>
                     <div class="facility-meta" id="facilityMeta">TACTICAL MAP BUS: STANDBY</div>
                 </div>
                 <button class="facility-close glow" id="facilityClose" type="button">[ BACK TO TERMINAL ]</button>
@@ -216,41 +216,44 @@
                 <aside class="menu-panel sidebar-left" aria-label="Terminal command menu">
                     <div class="menu-title">— NAVIGATION</div>
                     <nav class="menu-list" id="menuList" aria-label="Terminal commands">
-                        <button class="menu-item selected" type="button" data-cmd="welcome" data-index="0" aria-current="true">
-                            <span class="icon">⌂</span><span>WELCOME</span>
+                        <button class="menu-item selected" type="button" data-cmd="home" data-index="0" aria-current="true">
+                            <span class="icon">⌂</span><span>/HOME</span>
                         </button>
-                        <button class="menu-item" type="button" data-cmd="help" data-index="1" aria-current="false">
-                            <span class="icon">?</span><span>HELP</span>
+                        <button class="menu-item" type="button" data-cmd="welcome" data-index="1" aria-current="false">
+                            <span class="icon">⌁</span><span>/WELCOME</span>
+                        </button>
+                        <button class="menu-item" type="button" data-cmd="help" data-index="2" aria-current="false">
+                            <span class="icon">?</span><span>/HELP</span>
                         </button>
                         <div class="menu-title menu-section-title">— DATA</div>
-                        <button class="menu-item" type="button" data-cmd="load" data-index="2" aria-current="false">
-                            <span class="icon">◉</span><span>LOAD DATABASE</span>
+                        <button class="menu-item" type="button" data-cmd="load" data-index="3" aria-current="false">
+                            <span class="icon">◉</span><span>/LOAD DATABASE</span>
                         </button>
-                        <button class="menu-item" type="button" data-cmd="search" data-index="3" aria-current="false">
-                            <span class="icon">⌕</span><span>SEARCH</span>
+                        <button class="menu-item" type="button" data-cmd="search" data-index="4" aria-current="false">
+                            <span class="icon">⌕</span><span>/SEARCH</span>
                         </button>
-                        <button class="menu-item" type="button" data-cmd="categories" data-index="4" aria-current="false">
-                            <span class="icon">▦</span><span>CATEGORIES</span>
+                        <button class="menu-item" type="button" data-cmd="categories" data-index="5" aria-current="false">
+                            <span class="icon">▦</span><span>/CATEGORIES</span>
                         </button>
-                        <button class="menu-item" type="button" data-cmd="clear" data-index="5" aria-current="false">
-                            <span class="icon">⌧</span><span>CLEAR</span>
+                        <button class="menu-item" type="button" data-cmd="clear" data-index="6" aria-current="false">
+                            <span class="icon">⌧</span><span>/CLEAR</span>
                         </button>
 
                         <div class="menu-title menu-section-title">— ACCESS</div>
-                        <button class="menu-item" type="button" data-cmd="access" data-index="6" aria-current="false">
-                            <span class="icon">♙</span><span>ACCESS</span>
+                        <button class="menu-item" type="button" data-cmd="access" data-index="7" aria-current="false">
+                            <span class="icon">♙</span><span>/ACCESS</span>
                         </button>
-                        <button class="menu-item admin-cmd locked" type="button" data-cmd="loadStatus" data-index="7" aria-current="false" aria-disabled="true">
-                            <span class="icon">▥</span><span>LOAD STATUS</span>
+                        <button class="menu-item admin-cmd locked" type="button" data-cmd="loadStatus" data-index="8" aria-current="false" aria-disabled="true">
+                            <span class="icon">▥</span><span>/LOAD STATUS</span>
                         </button>
-                        <button class="menu-item admin-cmd locked" type="button" data-cmd="list" data-index="8" aria-current="false" aria-disabled="true">
-                            <span class="icon">▤</span><span>LIST ALL</span>
+                        <button class="menu-item admin-cmd locked" type="button" data-cmd="list" data-index="9" aria-current="false" aria-disabled="true">
+                            <span class="icon">▤</span><span>/LIST ALL</span>
                         </button>
-                        <button class="menu-item admin-cmd locked" type="button" data-cmd="fsearch" data-index="9" aria-current="false" aria-disabled="true">
-                            <span class="icon">⌕</span><span>FUZZY SEARCH</span>
+                        <button class="menu-item admin-cmd locked" type="button" data-cmd="fsearch" data-index="10" aria-current="false" aria-disabled="true">
+                            <span class="icon">⌕</span><span>/FSEARCH</span>
                         </button>
-                        <button class="menu-item admin-cmd locked" type="button" data-cmd="logout" data-index="10" aria-current="false" aria-disabled="true">
-                            <span class="icon">⏻</span><span>LOGOUT</span>
+                        <button class="menu-item admin-cmd locked" type="button" data-cmd="logout" data-index="11" aria-current="false" aria-disabled="true">
+                            <span class="icon">⏻</span><span>/LOGOUT</span>
                         </button>
                     </nav>
                     <div class="admin-badge" id="adminBadge">◆ ADMIN ACCESS ◆</div>
@@ -282,8 +285,17 @@
                 <aside class="sidebar-right system-sidebar" aria-label="Facility overview sidebar">
                     <section class="side-card facility-overview-card">
                         <h2>// FACILITY OVERVIEW</h2>
+                        <div class="bre-site-indicators" id="breSiteIndicators" aria-label="BRE site connection indicators">
+                            <span class="bre-site-indicator offline" data-bre-site="BRE-01">BRE-01</span>
+                            <span class="bre-site-indicator offline" data-bre-site="BRE-02">BRE-02</span>
+                            <span class="bre-site-indicator offline" data-bre-site="BRE-03">BRE-03</span>
+                            <span class="bre-site-indicator offline" data-bre-site="BRE-04">BRE-04</span>
+                            <span class="bre-site-indicator offline" data-bre-site="BRE-05">BRE-05</span>
+                            <span class="bre-site-indicator offline" data-bre-site="BRE-06">BRE-06</span>
+                        </div>
                         <button class="mini-wireframe projection-frame" type="button" data-panel-cmd="wireframe" data-panel-label="Tactical wireframe map" aria-label="Open tactical wireframe map" title="Open tactical wireframe map">
                             <canvas id="hologramCanvas" aria-hidden="true"></canvas>
+                            <img class="site-floorplan-preview" id="siteFloorplanImage" alt="" hidden>
                         </button>
                     </section>
                     <section class="side-card signal-spectrum-card">
@@ -294,14 +306,14 @@
                         <h2>// COMMAND ACCESS</h2>
                         <div class="side-action-module">
                             <button class="side-action-button" type="button" data-panel-cmd="diagnostic">
-                                <span aria-hidden="true">⌁</span><span>DIAGNOSTIC</span>
+                                <span aria-hidden="true">⌁</span><span>/DIAGNOSTIC</span>
                             </button>
                             <div class="side-ascii diag-ascii side-glyph-widget" id="sideDiagnosticTelemetry" aria-hidden="true">
                             </div>
                         </div>
                         <div class="side-action-module">
                             <button class="side-action-button" type="button" data-panel-cmd="facility">
-                                <span aria-hidden="true">⛨</span><span>FACILITY STATUS</span>
+                                <span aria-hidden="true">⛨</span><span>/TOPOGRAPHY</span>
                             </button>
                             <div class="side-ascii facility-ascii side-glyph-widget" id="sideFacilityTelemetry" aria-hidden="true">
                             </div>
@@ -364,6 +376,7 @@
     <script src="js/session-restore.js" defer></script>
     <script src="js/map-overlay.js" defer></script>
     <script src="js/status-profile.js" defer></script>
+    <script src="js/sites.js" defer></script>
     <script src="js/diagnostics.js" defer></script>
     <script src="js/facility-status.js" defer></script>
     <script src="js/access.js" defer></script>

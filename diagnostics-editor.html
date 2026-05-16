@@ -348,7 +348,7 @@
                 </details>
 
                 <details open>
-                    <summary>Facility Status</summary>
+                    <summary>Topography (Facility Status)</summary>
                     <div class="details-body">
                         <div class="field-grid">
                             <label>Facility title
@@ -418,7 +418,7 @@ build = 4.7.2
 welcome = WELCOME
 help = HELP
 diagnostic = DIAGNOSTIC
-facility = FACILITY STATUS
+facility = TOPOGRAPHY
 load = LOAD DATABASE
 search = SEARCH
 categories = CATEGORIES
@@ -493,7 +493,7 @@ FACILITY BUS : LOCAL ONLY {spinner}
 \`\`\`
 
 ## facility
-title = FACILITY STATUS
+title = TOPOGRAPHY
 ticker = MAINTENANCE REQUIRED // UNKNOWN LIFE SIGNS DETECTED {spinner}
 
 ## facility.grid
@@ -505,7 +505,7 @@ repair = 06 OPEN
 
         const COMMANDS = [
             ['welcome', 'Welcome'], ['help', 'Help'], ['diagnostic', 'Diagnostic'],
-            ['facility', 'Facility Status'], ['load', 'Load Database'], ['search', 'Search'],
+            ['facility', 'Topography'], ['load', 'Load Database'], ['search', 'Search'],
             ['categories', 'Categories'], ['clear', 'Clear'], ['access', 'Access'],
             ['loadStatus', 'Load Status'], ['list', 'List All'], ['fsearch', 'Fuzzy Search'],
             ['logout', 'Logout'], ['loadDatabase', 'Typed: LOAD DATABASE'],
@@ -933,7 +933,7 @@ repair = 06 OPEN
                 byId(`diag-lines-${id}`).value = collectLines(values, `diagnostic.${id}`, 12, true);
             });
 
-            els.facilityTitle.value = getValue(values, 'facility.title', 'FACILITY STATUS');
+            els.facilityTitle.value = getValue(values, 'facility.title', 'TOPOGRAPHY');
             els.facilityTicker.value = getValue(values, 'facility.ticker', '');
             els.facilityStructure.value = getValue(values, 'facility.grid.structure', '77');
             els.facilityPower.value = getValue(values, 'facility.grid.power', '61');
@@ -970,7 +970,7 @@ repair = 06 OPEN
                     getValue(values, `diagnostic.${id}.state`, 'ok')
                 );
             });
-            addPreviewItem(els.preview, 'Facility', `${getValue(values, 'facility.title', 'FACILITY STATUS')}\n${collectLines(values, 'facility.overview', 5)}`, 'warn');
+            addPreviewItem(els.preview, 'Facility', `${getValue(values, 'facility.title', 'TOPOGRAPHY')}\n${collectLines(values, 'facility.overview', 5)}`, 'warn');
         }
 
         async function loadFromSite() {
