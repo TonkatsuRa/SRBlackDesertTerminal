@@ -947,6 +947,54 @@ async function fetchTextFile(path) {
     return response.text();
 }
 
+// Pattern for canonical site IDs (BRE-01 through BRE-99). Filename prefixes
+// like "BRE-01 " imply the file should only be visible at that site.
+const SITE_FILENAME_PREFIX_RE = /^(BRE-\d{2})\s/;
+// Sentinel site id meaning "always available regardless of connected site".
+// Stored in manifest entries' `sites` array (e.g. ["terminal"]) and inferred
+// for files prefixed "Terminal " or with no recognisable prefix.
+const ALWAYS_SITE = 'terminal';
+
+/**
+ * Compute the set of sites at which a database entry should be visible. Reads
+ * the explicit `entry.sites` array if present; otherwise infers from the
+ * filename prefix. Missing field + unrecognised prefix → always available.
+ *
+ * @param {Object} entry - a manifest entry (`{file, sites?, ...}`)
+ * @returns {string[]} list of site ids; may contain the ALWAYS_SITE sentinel
+ */
+function inferEntrySites(entry) {
+    if (Array.isArray(entry?.sites) && entry.sites.length) {
+        return entry.sites.map(s => String(s));
+    }
+    const file = String(entry?.file || '');
+    if (/^Terminal\s/i.test(file)) return [ALWAYS_SITE];
+    const m = file.match(SITE_FILENAME_PREFIX_RE);
+    if (m) return [m[1]];
+    return [ALWAYS_SITE];
+}
+
+/**
+ * Filter a manifest to the entries visible at the given connected-site id.
+ * Strict gating: when no site is connected, only ALWAYS_SITE entries show;
+ * when connected to BRE-XX, ALWAYS_SITE + BRE-XX entries show, others hidden.
+ * The `sites: ["*"]` convention is also honoured as "always available".
+ *
+ * @param {Array<Object>} manifest - entries from databases/manifest.json
+ * @param {string} connectedSiteId - e.g. "BRE-01" or "" when nothing connected
+ * @returns {Array<Object>} filtered subset of the manifest (same object refs)
+ */
+function visibleDatabasesForSite(manifest, connectedSiteId) {
+    const list = Array.isArray(manifest) ? manifest : [];
+    const current = String(connectedSiteId || '').trim();
+    return list.filter(entry => {
+        const sites = inferEntrySites(entry);
+        if (sites.includes('*')) return true;
+        if (sites.includes(ALWAYS_SITE)) return true;
+        return current && sites.includes(current);
+    });
+}
+
 async function loadDatabaseManifest() {
     if (databaseManifest) return databaseManifest;
     try {
@@ -1092,7 +1140,11 @@ async function showDatabaseSelector() {
     body.textContent = 'Reading database manifest...';
 
     const manifest = await loadDatabaseManifest();
-    renderDatabaseSelectorList(body, manifest);
+    // Filter to entries visible at the current site. AppState.connectedSiteId
+    // is "" when no site is connected, which collapses to ALWAYS_SITE-only.
+    const siteId = (typeof AppState === 'object' && AppState) ? (AppState.connectedSiteId || '') : '';
+    const visible = visibleDatabasesForSite(manifest, siteId);
+    renderDatabaseSelectorList(body, visible);
 }
 
 async function prepareManifestDatabase(item) {
